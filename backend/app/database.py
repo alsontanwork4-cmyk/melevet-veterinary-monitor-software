@@ -53,6 +53,59 @@ CORE_NIBP_CHANNELS: dict[int, tuple[str, str | None]] = {
 }
 
 
+def _sqlite_table_exists(connection: Connection, table_name: str) -> bool:
+    return bool(
+        connection.exec_driver_sql(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table_name,),
+        ).fetchone()
+    )
+
+
+def _sqlite_table_columns(connection: Connection, table_name: str) -> set[str]:
+    return {row[1] for row in connection.exec_driver_sql(f"PRAGMA table_info({table_name})").fetchall()}
+
+
+def _sqlite_has_current_core_storage_schema(connection: Connection) -> bool:
+    required_tables = {"channels", "measurements", "nibp_events", "alarms"}
+    if not all(_sqlite_table_exists(connection, table_name) for table_name in required_tables):
+        return False
+
+    channel_columns = _sqlite_table_columns(connection, "channels")
+    measurement_columns = _sqlite_table_columns(connection, "measurements")
+    nibp_columns = _sqlite_table_columns(connection, "nibp_events")
+    alarm_columns = _sqlite_table_columns(connection, "alarms")
+
+    return (
+        channel_columns == {"id", "upload_id", "source_type", "channel_index", "name", "unit", "valid_count"}
+        and measurement_columns == {"id", "upload_id", "segment_id", "channel_id", "timestamp", "value", "dedup_key"}
+        and nibp_columns == {"id", "upload_id", "segment_id", "timestamp", "channel_values", "has_measurement", "dedup_key"}
+        and alarm_columns == {
+            "id",
+            "upload_id",
+            "segment_id",
+            "timestamp",
+            "flag_hi",
+            "flag_lo",
+            "alarm_category",
+            "message",
+            "dedup_key",
+        }
+    )
+
+
+def _sqlite_has_current_dedup_schema(connection: Connection) -> bool:
+    if not _sqlite_has_current_core_storage_schema(connection):
+        return False
+
+    required_tables = {
+        "upload_measurement_links",
+        "upload_nibp_event_links",
+        "upload_alarm_links",
+    }
+    return all(_sqlite_table_exists(connection, table_name) for table_name in required_tables)
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -477,6 +530,12 @@ def ensure_sqlite_core_storage_compaction(*, bind=None, database_url: str | None
         if not upload_table_rows:
             return False
 
+        # Fresh databases created from current ORM metadata already use the
+        # compact core schema and do not need legacy table-rewrite migration.
+        if _sqlite_has_current_core_storage_schema(connection):
+            connection.exec_driver_sql(f'PRAGMA user_version = {SQLITE_CORE_STORAGE_SCHEMA_VERSION}')
+            return True
+
         _create_compact_storage_tables(connection)
         _copy_compact_channels(connection)
         _copy_compact_measurements(connection)
@@ -814,6 +873,15 @@ def ensure_sqlite_upload_dedup_schema(*, bind=None, database_url: str | None = N
             return False
 
         current_version = int(connection.exec_driver_sql("PRAGMA user_version").scalar() or 0)
+        if _sqlite_has_current_dedup_schema(connection):
+            connection.exec_driver_sql(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_uploads_combined_hash ON uploads (combined_hash)"
+            )
+            if current_version < SQLITE_UPLOAD_DEDUP_SCHEMA_VERSION:
+                connection.exec_driver_sql(f"PRAGMA user_version = {SQLITE_UPLOAD_DEDUP_SCHEMA_VERSION}")
+                changed = True
+            return changed
+
         measurement_columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(measurements)").fetchall()}
         dedup_ready = "dedup_key" in measurement_columns and bool(
             connection.exec_driver_sql(
