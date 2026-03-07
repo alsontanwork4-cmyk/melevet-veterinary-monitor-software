@@ -1,0 +1,11 @@
+{
+  "trend": {
+    "14": { "name": "spo2_be_u16", "unit": "%" },
+    "16": { "name": "heart_rate_be_u16", "unit": "bpm" }
+  },
+  "nibp": {
+    "14": { "name": "bp_systolic_inferred", "unit": "mmHg" },
+    "15": { "name": "bp_mean_inferred", "unit": "mmHg" },
+    "16": { "name": "bp_diastolic_inferred", "unit": "mmHg" }
+  }
+}
