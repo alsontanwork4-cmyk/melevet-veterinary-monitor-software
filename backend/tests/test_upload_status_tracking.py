@@ -96,8 +96,6 @@ def test_create_upload_stub_initializes_progress_fields() -> None:
             trend_index=b"index",
             nibp_data=None,
             nibp_index=None,
-            alarm_data=None,
-            alarm_index=None,
         )
 
         assert upload.status == UploadStatus.processing
@@ -122,8 +120,6 @@ def test_process_upload_marks_completed_with_final_progress() -> None:
             trend_index=trend_index,
             nibp_data=None,
             nibp_index=None,
-            alarm_data=None,
-            alarm_index=None,
         )
 
         result = process_upload_for_existing_upload(
@@ -133,8 +129,6 @@ def test_process_upload_marks_completed_with_final_progress() -> None:
             trend_index=trend_index,
             nibp_data=None,
             nibp_index=None,
-            alarm_data=None,
-            alarm_index=None,
         )
 
         refreshed = db.get(Upload, result.upload_id)
@@ -156,8 +150,6 @@ def test_stale_processing_upload_is_marked_error() -> None:
             trend_index=b"index",
             nibp_data=None,
             nibp_index=None,
-            alarm_data=None,
-            alarm_index=None,
         )
 
         upload.heartbeat_at = datetime.now(UTC) - timedelta(seconds=settings.upload_timeout_seconds + 5)
@@ -183,8 +175,6 @@ def test_find_reusable_upload_is_global_by_hash() -> None:
             trend_index=b"index",
             nibp_data=None,
             nibp_index=None,
-            alarm_data=None,
-            alarm_index=None,
             combined_hash="same-hash",
         )
         upload.status = UploadStatus.completed
@@ -209,8 +199,6 @@ def test_create_upload_stub_raises_for_exact_duplicate_hash() -> None:
             trend_index=b"index-a",
             nibp_data=None,
             nibp_index=None,
-            alarm_data=None,
-            alarm_index=None,
             combined_hash="shared-hash",
         )
 
@@ -222,8 +210,6 @@ def test_create_upload_stub_raises_for_exact_duplicate_hash() -> None:
                 trend_index=b"index-b",
                 nibp_data=None,
                 nibp_index=None,
-                alarm_data=None,
-                alarm_index=None,
                 combined_hash="shared-hash",
             )
 
@@ -242,8 +228,6 @@ def test_partial_overlap_upload_reuses_existing_measurements_and_keeps_full_view
             trend_index=first_trend_index,
             nibp_data=None,
             nibp_index=None,
-            alarm_data=None,
-            alarm_index=None,
         )
         process_upload_for_existing_upload(
             db,
@@ -252,8 +236,6 @@ def test_partial_overlap_upload_reuses_existing_measurements_and_keeps_full_view
             trend_index=first_trend_index,
             nibp_data=None,
             nibp_index=None,
-            alarm_data=None,
-            alarm_index=None,
         )
 
         second_trend_data = _build_trend_data_with_timestamps(15, start_unix_seconds=start_unix)
@@ -265,8 +247,6 @@ def test_partial_overlap_upload_reuses_existing_measurements_and_keeps_full_view
             trend_index=second_trend_index,
             nibp_data=None,
             nibp_index=None,
-            alarm_data=None,
-            alarm_index=None,
         )
         process_upload_for_existing_upload(
             db,
@@ -275,8 +255,6 @@ def test_partial_overlap_upload_reuses_existing_measurements_and_keeps_full_view
             trend_index=second_trend_index,
             nibp_data=None,
             nibp_index=None,
-            alarm_data=None,
-            alarm_index=None,
         )
 
         db.refresh(second_upload)

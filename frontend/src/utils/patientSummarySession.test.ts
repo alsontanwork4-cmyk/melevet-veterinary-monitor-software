@@ -20,7 +20,12 @@ describe("patientSummarySession", () => {
         status: "completed",
         trend_frames: 1,
         nibp_frames: 0,
-        alarm_frames: 0,
+        measurements_new: 0,
+        measurements_reused: 0,
+        nibp_new: 0,
+        nibp_reused: 0,
+        archived_at: null,
+        archive_id: null,
       },
       {
         id: 12,
@@ -29,7 +34,12 @@ describe("patientSummarySession", () => {
         status: "completed",
         trend_frames: 1,
         nibp_frames: 0,
-        alarm_frames: 0,
+        measurements_new: 0,
+        measurements_reused: 0,
+        nibp_new: 0,
+        nibp_reused: 0,
+        archived_at: null,
+        archive_id: null,
       },
       {
         id: 13,
@@ -38,7 +48,12 @@ describe("patientSummarySession", () => {
         status: "processing",
         trend_frames: 1,
         nibp_frames: 0,
-        alarm_frames: 0,
+        measurements_new: 0,
+        measurements_reused: 0,
+        nibp_new: 0,
+        nibp_reused: 0,
+        archived_at: null,
+        archive_id: null,
       },
     ]);
 
@@ -165,6 +180,6 @@ describe("patientSummarySession", () => {
         },
         new Set(),
       ),
-    ).toBe(new Date("2026-03-06T07:25:20Z").toLocaleString());
+    ).toBe("2026-03-06 07:25:20 UTC");
   });
 });

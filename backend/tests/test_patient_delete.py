@@ -45,13 +45,10 @@ def _new_upload(patient_id: int, *, seed: str) -> Upload:
         progress_total=1,
         trend_frames=2,
         nibp_frames=1,
-        alarm_frames=0,
         trend_sha256=checksum,
         trend_index_sha256=checksum,
         nibp_sha256=checksum,
         nibp_index_sha256=checksum,
-        alarm_sha256=checksum,
-        alarm_index_sha256=checksum,
         combined_hash=checksum,
         detected_local_dates=["2026-03-07"],
     )

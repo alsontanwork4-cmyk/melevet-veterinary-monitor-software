@@ -4,7 +4,7 @@ from datetime import UTC, date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
-from ..models import AlarmCategory, SourceType, UploadStatus
+from ..models import SourceType, UploadStatus
 
 
 def _serialize_datetime_utc(value: datetime) -> str:
@@ -41,6 +41,94 @@ class PatientBase(ApiModel):
     weight_kg: float | None = None
     owner_name: str | None = None
     notes: str | None = None
+
+
+class AuthLoginRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=1, max_length=256)
+
+
+class AuthUserOut(ApiModel):
+    id: int
+    username: str
+
+
+class AuthSessionOut(ApiModel):
+    user: AuthUserOut
+    csrf_token: str
+    expires_at: datetime
+
+
+class CsrfTokenOut(ApiModel):
+    csrf_token: str
+
+
+class LogoutResponse(ApiModel):
+    logged_out: bool
+
+
+class VitalThresholdRange(ApiModel):
+    low: float | None = None
+    high: float | None = None
+
+
+class SpeciesVitalThresholds(ApiModel):
+    spo2: VitalThresholdRange = Field(default_factory=VitalThresholdRange)
+    heart_rate: VitalThresholdRange = Field(default_factory=VitalThresholdRange)
+    nibp_systolic: VitalThresholdRange = Field(default_factory=VitalThresholdRange)
+    nibp_map: VitalThresholdRange = Field(default_factory=VitalThresholdRange)
+    nibp_diastolic: VitalThresholdRange = Field(default_factory=VitalThresholdRange)
+
+
+class AppSettingsOut(ApiModel):
+    archive_retention_days: int | None = None
+    link_table_warning_threshold: int
+    log_level: str
+    orphan_upload_retention_days: int
+    segment_gap_seconds: int
+    recording_period_gap_seconds: int
+    usage_reporting_enabled: bool = False
+    vital_thresholds: dict[str, SpeciesVitalThresholds] = Field(default_factory=dict)
+
+
+class AppSettingsUpdate(ApiModel):
+    archive_retention_days: int | None = Field(default=None, ge=1)
+    link_table_warning_threshold: int | None = Field(default=None, ge=1)
+    log_level: str | None = Field(default=None, max_length=16)
+    orphan_upload_retention_days: int | None = Field(default=None, ge=1)
+    segment_gap_seconds: int | None = Field(default=None, ge=60)
+    recording_period_gap_seconds: int | None = Field(default=None, ge=60)
+    usage_reporting_enabled: bool | None = None
+    vital_thresholds: dict[str, SpeciesVitalThresholds] | None = None
+
+class UpdateStatusOut(ApiModel):
+    current_version: str
+    latest_version: str | None = None
+    download_url: str | None = None
+    release_url: str | None = None
+    checked_at: datetime | None = None
+    is_update_available: bool
+    error: str | None = None
+
+
+class AuditLogOut(ApiModel):
+    id: int
+    action: str
+    entity_type: str
+    entity_id: str
+    actor: str
+    details_json: dict[str, object] = Field(default_factory=dict)
+    timestamp: datetime
+
+
+class PaginatedAuditLog(ApiModel):
+    items: list[AuditLogOut]
+    total: int
+
+
+class BulkEncounterExportRequest(BaseModel):
+    encounter_ids: list[int] = Field(min_length=1, max_length=200)
+    include_nibp: bool = True
 
 
 class PatientCreate(PatientBase):
@@ -82,16 +170,15 @@ class UploadOut(ApiModel):
     error_message: str | None = None
     trend_frames: int
     nibp_frames: int
-    alarm_frames: int
     combined_hash: str
     detected_local_dates: list[str]
     superseded_at: datetime | None = None
+    archived_at: datetime | None = None
+    archive_id: str | None = None
     measurements_new: int = 0
     measurements_reused: int = 0
     nibp_new: int = 0
     nibp_reused: int = 0
-    alarms_new: int = 0
-    alarms_reused: int = 0
 
 
 class RecordingPeriodOut(ApiModel):
@@ -125,15 +212,24 @@ class ChannelOut(ApiModel):
     valid_count: int
 
 
+class DiscoveredChannelOut(ApiModel):
+    source_type: SourceType
+    channel_index: int
+    name: str
+    unit: str | None
+    valid_count: int
+
+
 class DiscoveryResponse(ApiModel):
     upload_id: int
     trend_frames: int
     nibp_frames: int
-    alarm_frames: int
     periods: int
     segments: int
     channels: list[ChannelOut]
     detected_local_dates: list[str]
+    archived_at: datetime | None = None
+    archive_id: str | None = None
 
 
 class MeasurementPoint(ApiModel):
@@ -158,21 +254,10 @@ class EncounterMeasurementsResponse(ApiModel):
     points: list[MeasurementPoint]
 
 
-class AlarmOut(ApiModel):
-    id: int
-    upload_id: int
-    segment_id: int
-    timestamp: datetime
-    flag_hi: int
-    flag_lo: int
-    alarm_category: AlarmCategory
-    message: str
-
-
 class NibpEventOut(ApiModel):
     id: int
-    upload_id: int
-    segment_id: int
+    upload_id: int | None
+    segment_id: int | None
     timestamp: datetime
     channel_values: dict[str, int | None]
     has_measurement: bool
@@ -195,7 +280,12 @@ class PatientUploadHistoryItem(ApiModel):
     status: UploadStatus
     trend_frames: int
     nibp_frames: int
-    alarm_frames: int
+    measurements_new: int = 0
+    measurements_reused: int = 0
+    nibp_new: int = 0
+    nibp_reused: int = 0
+    archived_at: datetime | None = None
+    archive_id: str | None = None
 
 
 class EncounterBase(ApiModel):
@@ -222,7 +312,8 @@ class EncounterOut(EncounterBase):
     upload_id: int
     trend_frames: int
     nibp_frames: int
-    alarm_frames: int
+    archived_at: datetime | None = None
+    archive_id: str | None = None
     day_start_utc: datetime
     day_end_utc: datetime
     created_at: datetime
@@ -261,6 +352,97 @@ class PatientWithUploadCount(ApiModel):
     report_date: date | None
 
 
+class PaginatedPatientList(ApiModel):
+    items: list[PatientWithUploadCount]
+    total: int
+
+
+class PaginatedPatientUploadHistory(ApiModel):
+    items: list[PatientUploadHistoryItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class PaginatedPatientEncounterHistory(ApiModel):
+    items: list[PatientEncounterHistoryItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class PaginatedNibpEventList(ApiModel):
+    items: list[NibpEventOut]
+    total: int
+    limit: int
+    offset: int
+
+
+class DatabaseDiagnostics(ApiModel):
+    database_kind: str
+    sqlite_file_size_bytes: int | None = None
+    measurement_count: int
+    upload_measurement_link_count: int
+    upload_nibp_event_link_count: int
+    link_table_warning_threshold: int
+    upload_measurement_links_over_threshold: bool
+    upload_nibp_event_links_over_threshold: bool
+
+
+class ArchiveOut(ApiModel):
+    id: str
+    filename: str
+    size_bytes: int
+    created_at: datetime
+    upload_id: int
+    patient_id: int | None = None
+    encounter_ids: list[int] = Field(default_factory=list)
+    measurement_count: int = 0
+    nibp_event_count: int = 0
+
+
+class ArchiveRunResponse(ApiModel):
+    archived_upload_count: int
+    archives: list[ArchiveOut] = Field(default_factory=list)
+
+
+class DatabaseStatsOut(ApiModel):
+    database_kind: str
+    sqlite_file_size_bytes: int | None = None
+    live_measurement_count: int
+    live_nibp_event_count: int
+    archived_upload_count: int
+    archive_file_count: int
+    archive_total_size_bytes: int
+    oldest_archive_at: datetime | None = None
+    newest_archive_at: datetime | None = None
+
+
+class TelemetryEventIn(ApiModel):
+    event_type: str = Field(min_length=1, max_length=64)
+    action_name: str | None = Field(default=None, max_length=128)
+    route: str | None = Field(default=None, max_length=256)
+    status: str | None = Field(default=None, max_length=64)
+    duration_ms: int | None = Field(default=None, ge=0)
+    count: int | None = Field(default=None, ge=0)
+    app_version: str | None = Field(default=None, max_length=64)
+    browser: str | None = Field(default=None, max_length=256)
+    platform: str | None = Field(default=None, max_length=256)
+    error_name: str | None = Field(default=None, max_length=128)
+    error_message: str | None = Field(default=None, max_length=2000)
+    stack: str | None = None
+    component_stack: str | None = None
+    metadata: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+
+
+class TelemetryStatusOut(ApiModel):
+    usage_reporting_enabled: bool
+    queued_event_count: int
+    queued_size_bytes: int
+    crash_event_count: int
+    crash_size_bytes: int
+
+
 class UploadDeleteResponse(ApiModel):
     deleted: bool
     upload_id: int
@@ -269,4 +451,43 @@ class UploadDeleteResponse(ApiModel):
 class PatientDeleteResponse(ApiModel):
     deleted: bool
     patient_id: int
+
+
+class StagedUploadPatient(ApiModel):
+    patient_id: int | None = None
+    patient_id_code: str | None = None
+    patient_name: str | None = None
+    patient_species: str | None = None
+
+
+class StagedUploadOut(ApiModel):
+    stage_id: str
+    status: UploadStatus
+    phase: str
+    progress_current: int
+    progress_total: int
+    created_at: datetime
+    updated_at: datetime
+    expires_at: datetime
+    error_message: str | None = None
+    timezone: str
+    trend_frames: int = 0
+    nibp_frames: int = 0
+    periods: int = 0
+    segments: int = 0
+    channels: list[DiscoveredChannelOut] = Field(default_factory=list)
+    detected_local_dates: list[str] = Field(default_factory=list)
+    patient_id: int | None = None
+    patient_id_code: str | None = None
+    patient_name: str | None = None
+    patient_species: str | None = None
+
+
+class StagedEncounterCreate(EncounterBase):
+    pass
+
+
+class StagedUploadDeleteResponse(ApiModel):
+    deleted: bool
+    stage_id: str
 

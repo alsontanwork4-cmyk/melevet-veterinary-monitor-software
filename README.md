@@ -85,6 +85,8 @@ Copy-Item .env.example .env
 ```
 
 The backend uses SQLite by default, so no separate database server is required for local development.
+The default `DATABASE_URL=sqlite:///./melevet.db` is resolved from the `backend` working directory, so starting Uvicorn from `backend` creates or opens `backend/melevet.db`.
+Authentication is enabled by default. Before the first startup, set `AUTH_BOOTSTRAP_USERNAME` and `AUTH_BOOTSTRAP_PASSWORD` in `backend/.env` so the initial login user can be created automatically.
 
 ### 3. Set up the frontend
 
@@ -125,6 +127,52 @@ npm run dev
 The frontend will usually start at:
 
 - `http://localhost:5173`
+
+## Windows Local App Scaffold
+
+For the single-PC Windows install flow, launcher and packaging scaffolding now lives in [`scripts/local_app/`](./scripts/local_app).
+
+Key entry points:
+
+- `scripts/local_app/launch_melevet.ps1`
+- `scripts/local_app/package_local_app.ps1`
+- `scripts/local_app/create_shortcuts.ps1`
+
+### One-click local launch
+
+From the repository root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\local_app\launch_melevet.ps1
+```
+
+What the launcher does:
+
+- reuses an already-running local Melevet instance if `http://127.0.0.1:8000/health` is healthy
+- opens the browser automatically
+- stores runtime data under `%LOCALAPPDATA%\Melevet\`
+- writes backend stdout/stderr logs under `%LOCALAPPDATA%\Melevet\logs\`
+
+### Package scaffold for a Windows install
+
+To create a distributable folder scaffold:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\local_app\package_local_app.ps1
+```
+
+This creates `output\local-app-package\Melevet\` with:
+
+- the built frontend assets
+- the backend source tree
+- the launcher scripts
+- packaging notes for where the self-contained backend executable should be placed
+
+Create desktop and Start Menu shortcuts for a packaged install with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\local_app\create_shortcuts.ps1 -InstallRoot C:\Path\To\Melevet
+```
 
 ## How to Use the System
 
@@ -171,6 +219,8 @@ APP_NAME=Melevet Monitor Platform
 API_PREFIX=/api
 DATABASE_URL=sqlite:///./melevet.db
 CORS_ORIGINS=http://localhost:5173
+AUTH_BOOTSTRAP_USERNAME=admin
+AUTH_BOOTSTRAP_PASSWORD=change-me-before-sharing
 CHANNEL_MAP_PATH=channel_map.json
 RECORDING_PERIOD_GAP_SECONDS=86400
 SEGMENT_GAP_SECONDS=600
@@ -180,6 +230,8 @@ MEASUREMENT_INSERT_BATCH_SIZE=5000
 EVENT_INSERT_BATCH_SIZE=1000
 ```
 
+On a fresh database, startup will fail if the `users` table is empty and the bootstrap credentials are missing. After the first user is created, later restarts can succeed without those variables as long as the database still contains at least one user.
+
 ### Frontend environment variables
 
 The frontend reads configuration from `frontend/.env`.
@@ -187,7 +239,23 @@ The frontend reads configuration from `frontend/.env`.
 Default example value:
 
 ```env
-VITE_API_BASE_URL=http://localhost:8000/api
+VITE_DEV_API_ORIGIN=http://localhost:8000
+```
+
+Production defaults to same-origin `/api`. If `VITE_API_BASE_URL` is set, it must be a relative path or an HTTPS URL. Plain HTTP is only accepted for localhost development.
+
+### Security Baseline
+
+- Frontend dev and preview now emit baseline security headers (`Content-Security-Policy`, `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy`).
+- The frontend no longer depends on Google Fonts and only loads local assets by default.
+- Backend dependencies are pinned in `backend/requirements.lock` for CI and reproducible installs.
+
+To install the backend with pinned versions:
+
+```powershell
+cd backend
+.venv\Scripts\Activate.ps1
+pip install -r requirements.lock
 ```
 
 ## Channel Mapping
@@ -244,6 +312,12 @@ Check that you uploaded matching `.data` and `.Index` files for the same record 
 By default, the SQLite database is created at:
 
 - `backend/melevet.db`
+
+If startup fails with `Authentication is enabled but no users exist`, check that:
+
+- `backend/.env` exists
+- `AUTH_BOOTSTRAP_USERNAME` and `AUTH_BOOTSTRAP_PASSWORD` are set in `backend/.env`
+- you started the backend from the `backend` folder so `sqlite:///./melevet.db` resolves to `backend/melevet.db`
 
 ## Notes
 

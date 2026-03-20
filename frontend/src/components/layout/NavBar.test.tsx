@@ -30,16 +30,42 @@ describe("NavBar", () => {
     await act(async () => {
       root.render(
         <MemoryRouter initialEntries={["/"]}>
-          <NavBar />
+          <NavBar isOpen onToggle={() => undefined} userDisplayName="Dr Tan" onLogout={() => undefined} />
         </MemoryRouter>,
       );
     });
 
     expect(container.textContent).toContain("Homepage");
     expect(container.textContent).toContain("Decoding");
+    expect(container.textContent).not.toContain("Settings");
+    expect(container.textContent).not.toContain("Help");
 
     const links = Array.from(container.querySelectorAll("a"));
     const homepageLink = links.find((link) => link.textContent?.trim() === "Homepage");
     expect(homepageLink?.className).toContain("nav-link-active");
+    expect(container.textContent).toContain("Dr Tan");
+    expect(container.textContent).toContain("Sign out");
+  });
+
+  it("opens settings and help from the gear menu", async () => {
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={["/activity"]}>
+          <NavBar isOpen onToggle={() => undefined} userDisplayName="Dr Tan" onLogout={() => undefined} />
+        </MemoryRouter>,
+      );
+    });
+
+    const menuButton = container.querySelector('button[aria-label="Open settings and help menu"]');
+    expect(menuButton).not.toBeNull();
+
+    await act(async () => {
+      menuButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const menu = container.querySelector('[role="menu"][aria-label="Settings and help"]');
+    expect(menu).not.toBeNull();
+    expect(menu?.textContent).toContain("Settings");
+    expect(menu?.textContent).toContain("Help");
   });
 });

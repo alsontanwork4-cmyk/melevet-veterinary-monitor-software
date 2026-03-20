@@ -27,13 +27,14 @@ def _new_upload(patient_id: int, upload_time: datetime) -> Upload:
         progress_total=1,
         trend_frames=1,
         nibp_frames=0,
-        alarm_frames=0,
+        measurements_new=3,
+        measurements_reused=7,
+        nibp_new=1,
+        nibp_reused=2,
         trend_sha256=checksum,
         trend_index_sha256=checksum,
         nibp_sha256=checksum,
         nibp_index_sha256=checksum,
-        alarm_sha256=checksum,
-        alarm_index_sha256=checksum,
     )
 
 
@@ -70,11 +71,18 @@ def test_list_patient_uploads_includes_latest_recorded_at() -> None:
     )
     db.commit()
 
-    items = list_patient_uploads(patient.id, db)
+    response = list_patient_uploads(patient.id, db)
 
-    assert len(items) == 1
-    assert items[0].upload_time == datetime(2026, 3, 6, 7, 25, 20)
-    assert items[0].latest_recorded_at == datetime(2026, 3, 2, 13, 51, 52)
+    assert response.total == 1
+    assert response.limit == 50
+    assert response.offset == 0
+    assert len(response.items) == 1
+    assert response.items[0].upload_time == datetime(2026, 3, 6, 7, 25, 20)
+    assert response.items[0].latest_recorded_at == datetime(2026, 3, 2, 13, 51, 52)
+    assert response.items[0].measurements_new == 3
+    assert response.items[0].measurements_reused == 7
+    assert response.items[0].nibp_new == 1
+    assert response.items[0].nibp_reused == 2
 
 
 def test_list_patient_uploads_returns_null_latest_recorded_at_without_periods() -> None:
@@ -88,8 +96,9 @@ def test_list_patient_uploads_returns_null_latest_recorded_at_without_periods() 
     db.add(upload)
     db.commit()
 
-    items = list_patient_uploads(patient.id, db)
+    response = list_patient_uploads(patient.id, db)
 
-    assert len(items) == 1
-    assert items[0].upload_time == datetime(2026, 3, 6, 9, 12, 0)
-    assert items[0].latest_recorded_at is None
+    assert response.total == 1
+    assert len(response.items) == 1
+    assert response.items[0].upload_time == datetime(2026, 3, 6, 9, 12, 0)
+    assert response.items[0].latest_recorded_at is None

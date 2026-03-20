@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from time import perf_counter
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -13,11 +13,17 @@ from ..schemas import (
     EncounterCreate,
     EncounterDeleteResponse,
     EncounterMeasurementsResponse,
+    PaginatedNibpEventList,
     EncounterOut,
     EncounterUpdate,
     MeasurementPoint,
 )
-from ..services.chart_service import list_encounter_channels, query_encounter_measurements
+from ..services.chart_service import (
+    list_encounter_channels,
+    list_encounter_nibp_events_page,
+    query_encounter_measurements,
+)
+from ..services.audit_service import resolve_actor_from_request
 from ..services.encounter_service import create_or_replace_encounter, delete_encounter, get_encounter, update_encounter
 
 
@@ -29,6 +35,7 @@ logger = logging.getLogger(__name__)
 def create_upload_encounter(
     upload_id: int,
     payload: EncounterCreate,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     upload = db.get(Upload, upload_id)
@@ -53,6 +60,7 @@ def create_upload_encounter(
             timezone_name=payload.timezone,
             label=payload.label,
             notes=payload.notes,
+            actor=resolve_actor_from_request(request),
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -67,7 +75,7 @@ def get_encounter_by_id(encounter_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/encounters/{encounter_id}", response_model=EncounterOut)
-def patch_encounter(encounter_id: int, payload: EncounterUpdate, db: Session = Depends(get_db)):
+def patch_encounter(encounter_id: int, payload: EncounterUpdate, request: Request, db: Session = Depends(get_db)):
     encounter = get_encounter(db, encounter_id)
     if encounter is None:
         raise HTTPException(status_code=404, detail="Encounter not found")
@@ -80,18 +88,19 @@ def patch_encounter(encounter_id: int, payload: EncounterUpdate, db: Session = D
             timezone_name=payload.timezone,
             label=payload.label,
             notes=payload.notes,
+            actor=resolve_actor_from_request(request),
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.delete("/encounters/{encounter_id}", response_model=EncounterDeleteResponse)
-def remove_encounter(encounter_id: int, db: Session = Depends(get_db)):
+def remove_encounter(encounter_id: int, request: Request, db: Session = Depends(get_db)):
     encounter = get_encounter(db, encounter_id)
     if encounter is None:
         raise HTTPException(status_code=404, detail="Encounter not found")
 
-    delete_encounter(db, encounter)
+    delete_encounter(db, encounter, actor=resolve_actor_from_request(request))
     return EncounterDeleteResponse(deleted=True, encounter_id=encounter_id)
 
 
@@ -152,3 +161,21 @@ def get_encounter_measurements(
         (perf_counter() - started_at) * 1000,
     )
     return EncounterMeasurementsResponse(encounter_id=encounter_id, points=points)
+
+
+@router.get("/encounters/{encounter_id}/nibp-events", response_model=PaginatedNibpEventList)
+def get_encounter_nibp_events(
+    encounter_id: int,
+    measurements_only: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    result = list_encounter_nibp_events_page(
+        db,
+        encounter_id=encounter_id,
+        measurements_only=measurements_only,
+        limit=limit,
+        offset=offset,
+    )
+    return PaginatedNibpEventList(items=result.items, total=result.total, limit=limit, offset=offset)

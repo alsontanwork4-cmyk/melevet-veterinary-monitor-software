@@ -1,42 +1,32 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
-from ..models import (
-    Alarm,
-    Channel,
-    Encounter,
-    Measurement,
-    NibpEvent,
-    Patient,
-    RecordingPeriod,
-    Segment,
-    Upload,
-    UploadAlarmLink,
-    UploadMeasurementLink,
-    UploadNibpEventLink,
-)
+from ..database import run_with_sqlite_retry
+from ..models import Encounter, Measurement, NibpEvent, Patient, Upload
+from .audit_service import log_audit_event
 
 
 @dataclass(frozen=True)
 class PatientDeleteStats:
     patient_id: int
-    upload_count: int
     deleted_upload_count: int
-    encounter_count_before: int
-    deleted_remaining_encounters: int
-    measurement_count: int
-    nibp_event_count: int
-    alarm_count: int
-    segment_count: int
-    recording_period_count: int
-    channel_count: int
+    deleted_encounter_count: int
+
+    @property
+    def upload_count(self) -> int:
+        return self.deleted_upload_count
+
+    @property
+    def encounter_count_before(self) -> int:
+        return self.deleted_encounter_count
 
 
-def prune_orphaned_canonical_rows(db: Session) -> tuple[int, int, int]:
+def prune_orphaned_canonical_rows(db: Session) -> tuple[int, int]:
     deleted_measurements = int(
         db.execute(
             delete(Measurement).where(~Measurement.upload_links.any()).where(Measurement.upload_id.is_(None))
@@ -49,108 +39,131 @@ def prune_orphaned_canonical_rows(db: Session) -> tuple[int, int, int]:
         ).rowcount
         or 0
     )
-    deleted_alarms = int(
-        db.execute(delete(Alarm).where(~Alarm.upload_links.any()).where(Alarm.upload_id.is_(None))).rowcount or 0
+    return deleted_measurements, deleted_nibp
+
+
+def create_patient_record(db: Session, payload: dict[str, Any], *, actor: str) -> Patient:
+    patient = Patient(**payload)
+    db.add(patient)
+    db.commit()
+    db.refresh(patient)
+    log_audit_event(
+        db,
+        action="created",
+        entity_type="patient",
+        entity_id=patient.id,
+        actor=actor,
+        details={
+            "patient_id_code": patient.patient_id_code,
+            "name": patient.name,
+            "species": patient.species,
+        },
+        commit=True,
     )
-    return deleted_measurements, deleted_nibp, deleted_alarms
+    db.refresh(patient)
+    return patient
 
 
-def _count_related_rows(db: Session, model, *, upload_ids: list[int]) -> int:
-    if not upload_ids:
-        return 0
-    if model is Measurement:
-        linked_count = int(
-            db.scalar(select(func.count(UploadMeasurementLink.id)).where(UploadMeasurementLink.upload_id.in_(upload_ids)))
-            or 0
-        )
-        if linked_count > 0:
-            return linked_count
-        return int(db.scalar(select(func.count(Measurement.id)).where(Measurement.upload_id.in_(upload_ids))) or 0)
-    if model is NibpEvent:
-        linked_count = int(
-            db.scalar(select(func.count(UploadNibpEventLink.id)).where(UploadNibpEventLink.upload_id.in_(upload_ids)))
-            or 0
-        )
-        if linked_count > 0:
-            return linked_count
-        return int(db.scalar(select(func.count(NibpEvent.id)).where(NibpEvent.upload_id.in_(upload_ids))) or 0)
-    if model is Alarm:
-        linked_count = int(
-            db.scalar(select(func.count(UploadAlarmLink.id)).where(UploadAlarmLink.upload_id.in_(upload_ids))) or 0
-        )
-        if linked_count > 0:
-            return linked_count
-        return int(db.scalar(select(func.count(Alarm.id)).where(Alarm.upload_id.in_(upload_ids))) or 0)
-    return int(
-        db.scalar(select(func.count(model.id)).where(model.upload_id.in_(upload_ids)))  # type: ignore[attr-defined]
-        or 0
+def update_patient_record(db: Session, patient: Patient, changes: dict[str, Any], *, actor: str) -> Patient:
+    previous_values = {key: getattr(patient, key) for key in changes}
+    for key, value in changes.items():
+        setattr(patient, key, value)
+
+    db.add(patient)
+    db.commit()
+    db.refresh(patient)
+    log_audit_event(
+        db,
+        action="updated",
+        entity_type="patient",
+        entity_id=patient.id,
+        actor=actor,
+        details={
+            "changes": changes,
+            "previous_values": previous_values,
+        },
+        commit=True,
     )
+    db.refresh(patient)
+    return patient
 
 
-def delete_patient_hard(db: Session, patient_id: int) -> PatientDeleteStats:
+def delete_patient_hard(db: Session, patient_id: int, *, actor: str = "system") -> PatientDeleteStats:
     existing_patient_id = db.scalar(select(Patient.id).where(Patient.id == patient_id))
     if existing_patient_id is None:
         raise ValueError("Patient not found")
 
-    upload_ids = list(db.scalars(select(Upload.id).where(Upload.patient_id == patient_id)).all())
-    encounter_count_before = int(
-        db.scalar(select(func.count(Encounter.id)).where(Encounter.patient_id == patient_id)) or 0
-    )
+    deleted_upload_count = 0
+    deleted_encounter_count = 0
+    patient_snapshot = db.get(Patient, patient_id)
+    encounter_snapshots = list(db.scalars(select(Encounter).where(Encounter.patient_id == patient_id)))
+    upload_snapshots = list(db.scalars(select(Upload).where(Upload.patient_id == patient_id)))
 
-    stats = PatientDeleteStats(
-        patient_id=patient_id,
-        upload_count=len(upload_ids),
-        deleted_upload_count=0,
-        encounter_count_before=encounter_count_before,
-        deleted_remaining_encounters=0,
-        measurement_count=_count_related_rows(db, Measurement, upload_ids=upload_ids),
-        nibp_event_count=_count_related_rows(db, NibpEvent, upload_ids=upload_ids),
-        alarm_count=_count_related_rows(db, Alarm, upload_ids=upload_ids),
-        segment_count=_count_related_rows(db, Segment, upload_ids=upload_ids),
-        recording_period_count=_count_related_rows(db, RecordingPeriod, upload_ids=upload_ids),
-        channel_count=_count_related_rows(db, Channel, upload_ids=upload_ids),
-    )
+    def _delete_operation() -> None:
+        nonlocal deleted_upload_count, deleted_encounter_count
+        db.execute(update(Patient).where(Patient.id == patient_id).values(preferred_encounter_id=None))
 
-    try:
-        db.execute(
-            update(Patient)
-            .where(Patient.id == patient_id)
-            .values(preferred_encounter_id=None)
+        for encounter in encounter_snapshots:
+            log_audit_event(
+                db,
+                action="deleted",
+                entity_type="encounter",
+                entity_id=encounter.id,
+                actor=actor,
+                details={
+                    "patient_id": encounter.patient_id,
+                    "upload_id": encounter.upload_id,
+                    "encounter_date_local": encounter.encounter_date_local.isoformat(),
+                    "reason": "patient-delete",
+                },
+            )
+
+        for upload in upload_snapshots:
+            log_audit_event(
+                db,
+                action="deleted",
+                entity_type="upload",
+                entity_id=upload.id,
+                actor=actor,
+                details={
+                    "patient_id": upload.patient_id,
+                    "combined_hash": upload.combined_hash,
+                    "status": upload.status.value,
+                    "reason": "patient-delete",
+                },
+            )
+
+        deleted_encounter_count = int(
+            db.execute(delete(Encounter).where(Encounter.patient_id == patient_id)).rowcount or 0
         )
-
-        deleted_upload_count = 0
-        if upload_ids:
-            upload_delete_result = db.execute(delete(Upload).where(Upload.id.in_(upload_ids)))
-            deleted_upload_count = int(upload_delete_result.rowcount or 0)
-
-        remaining_encounter_count = int(
-            db.scalar(select(func.count(Encounter.id)).where(Encounter.patient_id == patient_id)) or 0
+        deleted_upload_count = int(
+            db.execute(delete(Upload).where(Upload.patient_id == patient_id)).rowcount or 0
         )
-        deleted_remaining_encounters = 0
-        if remaining_encounter_count > 0:
-            encounter_delete_result = db.execute(delete(Encounter).where(Encounter.patient_id == patient_id))
-            deleted_remaining_encounters = int(encounter_delete_result.rowcount or remaining_encounter_count)
 
         patient_delete_result = db.execute(delete(Patient).where(Patient.id == patient_id))
         if int(patient_delete_result.rowcount or 0) != 1:
             raise RuntimeError(f"Patient delete affected {patient_delete_result.rowcount or 0} rows")
 
         prune_orphaned_canonical_rows(db)
+        log_audit_event(
+            db,
+            action="deleted",
+            entity_type="patient",
+            entity_id=patient_id,
+            actor=actor,
+            details={
+                "patient_id_code": patient_snapshot.patient_id_code if patient_snapshot is not None else None,
+                "name": patient_snapshot.name if patient_snapshot is not None else None,
+                "deleted_upload_count": deleted_upload_count,
+                "deleted_encounter_count": deleted_encounter_count,
+            },
+        )
         db.commit()
-    except Exception:
-        db.rollback()
-        raise
+
+    run_with_sqlite_retry(db, _delete_operation, operation_name=f"patient delete {patient_id}")
 
     return PatientDeleteStats(
-        patient_id=stats.patient_id,
-        upload_count=stats.upload_count,
+        patient_id=patient_id,
         deleted_upload_count=deleted_upload_count,
-        encounter_count_before=stats.encounter_count_before,
-        deleted_remaining_encounters=deleted_remaining_encounters,
-        measurement_count=stats.measurement_count,
-        nibp_event_count=stats.nibp_event_count,
-        alarm_count=stats.alarm_count,
-        segment_count=stats.segment_count,
-        recording_period_count=stats.recording_period_count,
-        channel_count=stats.channel_count,
+        deleted_encounter_count=deleted_encounter_count,
     )

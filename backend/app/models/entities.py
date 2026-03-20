@@ -22,6 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..database import Base
+from ..utils import normalize_dedup_timestamp
 
 
 class UploadStatus(str, enum.Enum):
@@ -35,13 +36,52 @@ class SourceType(str, enum.Enum):
     nibp = "nibp"
 
 
-class AlarmCategory(str, enum.Enum):
-    technical = "technical"
-    physiological_warning = "physiological_warning"
-    physiological_critical = "physiological_critical"
-    technical_critical = "technical_critical"
-    system = "system"
-    informational = "informational"
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    sessions: Mapped[list["UserSession"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_user_sessions_token_hash"),
+        Index("ix_user_sessions_expires_at", "expires_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    csrf_token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped[User] = relationship(back_populates="sessions")
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("ix_audit_logs_entity", "entity_type", "entity_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    entity_type: Mapped[str] = mapped_column(String(64), index=True)
+    entity_id: Mapped[str] = mapped_column(String(128), index=True)
+    actor: Mapped[str] = mapped_column(String(128))
+    details_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, server_default=func.now())
 
 
 class Patient(Base):
@@ -50,18 +90,18 @@ class Patient(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     patient_id_code: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(128), index=True)
-    species: Mapped[str] = mapped_column(String(64))
+    species: Mapped[str] = mapped_column(String(64), index=True)
     age: Mapped[str | None] = mapped_column(String(64), nullable=True)
     breed: Mapped[str | None] = mapped_column(String(128), nullable=True)
     weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
-    owner_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    owner_name: Mapped[str | None] = mapped_column(String(128), index=True, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     preferred_encounter_id: Mapped[int | None] = mapped_column(
         ForeignKey("encounters.id", ondelete="SET NULL"),
         index=True,
         nullable=True,
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
@@ -100,24 +140,21 @@ class Upload(Base):
 
     trend_frames: Mapped[int] = mapped_column(Integer, default=0)
     nibp_frames: Mapped[int] = mapped_column(Integer, default=0)
-    alarm_frames: Mapped[int] = mapped_column(Integer, default=0)
 
     trend_sha256: Mapped[str] = mapped_column(String(64))
     trend_index_sha256: Mapped[str] = mapped_column(String(64))
     nibp_sha256: Mapped[str] = mapped_column(String(64))
     nibp_index_sha256: Mapped[str] = mapped_column(String(64))
-    alarm_sha256: Mapped[str] = mapped_column(String(64))
-    alarm_index_sha256: Mapped[str] = mapped_column(String(64))
     combined_hash: Mapped[str] = mapped_column(String(64), default="")
     detected_local_dates: Mapped[list[str]] = mapped_column(JSON, default=list)
     superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    archive_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     measurements_new: Mapped[int] = mapped_column(Integer, default=0)
     measurements_reused: Mapped[int] = mapped_column(Integer, default=0)
     nibp_new: Mapped[int] = mapped_column(Integer, default=0)
     nibp_reused: Mapped[int] = mapped_column(Integer, default=0)
-    alarms_new: Mapped[int] = mapped_column(Integer, default=0)
-    alarms_reused: Mapped[int] = mapped_column(Integer, default=0)
 
     patient: Mapped[Patient | None] = relationship(back_populates="uploads")
     periods: Mapped[list[RecordingPeriod]] = relationship(
@@ -127,14 +164,10 @@ class Upload(Base):
     channels: Mapped[list[Channel]] = relationship(back_populates="upload", cascade="all, delete-orphan")
     measurements: Mapped[list[Measurement]] = relationship(back_populates="upload")
     nibp_events: Mapped[list[NibpEvent]] = relationship(back_populates="upload")
-    alarms: Mapped[list[Alarm]] = relationship(back_populates="upload")
     measurement_links: Mapped[list[UploadMeasurementLink]] = relationship(
         back_populates="upload", cascade="all, delete-orphan"
     )
     nibp_event_links: Mapped[list[UploadNibpEventLink]] = relationship(
-        back_populates="upload", cascade="all, delete-orphan"
-    )
-    alarm_links: Mapped[list[UploadAlarmLink]] = relationship(
         back_populates="upload", cascade="all, delete-orphan"
     )
     encounters: Mapped[list[Encounter]] = relationship(back_populates="upload")
@@ -185,8 +218,12 @@ class Encounter(Base):
         return self.upload.nibp_frames if self.upload is not None else 0
 
     @property
-    def alarm_frames(self) -> int:
-        return self.upload.alarm_frames if self.upload is not None else 0
+    def archived_at(self) -> datetime | None:
+        return self.upload.archived_at if self.upload is not None else None
+
+    @property
+    def archive_id(self) -> str | None:
+        return self.upload.archive_id if self.upload is not None else None
 
     @property
     def day_start_utc(self) -> datetime:
@@ -239,14 +276,10 @@ class Segment(Base):
     upload: Mapped[Upload] = relationship(back_populates="segments")
     measurements: Mapped[list[Measurement]] = relationship(back_populates="segment")
     nibp_events: Mapped[list[NibpEvent]] = relationship(back_populates="segment")
-    alarms: Mapped[list[Alarm]] = relationship(back_populates="segment")
     measurement_links: Mapped[list[UploadMeasurementLink]] = relationship(
         back_populates="segment", cascade="all, delete-orphan"
     )
     nibp_event_links: Mapped[list[UploadNibpEventLink]] = relationship(
-        back_populates="segment", cascade="all, delete-orphan"
-    )
-    alarm_links: Mapped[list[UploadAlarmLink]] = relationship(
         back_populates="segment", cascade="all, delete-orphan"
     )
 
@@ -374,63 +407,6 @@ class UploadNibpEventLink(Base):
     segment: Mapped[Segment] = relationship(back_populates="nibp_event_links")
     nibp_event: Mapped[NibpEvent] = relationship(back_populates="upload_links")
 
-
-class Alarm(Base):
-    __tablename__ = "alarms"
-    __table_args__ = (
-        UniqueConstraint("dedup_key", name="uq_alarms_dedup_key"),
-        Index("ix_alarms_ts", "timestamp"),
-        Index("ix_alarms_dedup_key", "dedup_key"),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    upload_id: Mapped[int | None] = mapped_column(
-        ForeignKey("uploads.id", ondelete="SET NULL"), index=True, nullable=True
-    )
-    segment_id: Mapped[int | None] = mapped_column(
-        ForeignKey("segments.id", ondelete="SET NULL"), index=True, nullable=True
-    )
-    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
-    flag_hi: Mapped[int] = mapped_column(Integer)
-    flag_lo: Mapped[int] = mapped_column(Integer)
-    alarm_category: Mapped[AlarmCategory] = mapped_column(Enum(AlarmCategory), default=AlarmCategory.informational)
-    message: Mapped[str] = mapped_column(Text)
-    dedup_key: Mapped[str] = mapped_column(String(255), nullable=False)
-
-    upload: Mapped[Upload | None] = relationship(back_populates="alarms")
-    segment: Mapped[Segment | None] = relationship(back_populates="alarms")
-    upload_links: Mapped[list[UploadAlarmLink]] = relationship(
-        back_populates="alarm", cascade="all, delete-orphan"
-    )
-
-
-class UploadAlarmLink(Base):
-    __tablename__ = "upload_alarm_links"
-    __table_args__ = (
-        UniqueConstraint("upload_id", "segment_id", "alarm_id", name="uq_upload_segment_alarm"),
-        Index("ix_upload_alarm_upload_ts", "upload_id", "timestamp"),
-        Index("ix_upload_alarm_segment_ts", "segment_id", "timestamp"),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    upload_id: Mapped[int] = mapped_column(ForeignKey("uploads.id", ondelete="CASCADE"), index=True)
-    segment_id: Mapped[int] = mapped_column(ForeignKey("segments.id", ondelete="CASCADE"), index=True)
-    alarm_id: Mapped[int] = mapped_column(ForeignKey("alarms.id", ondelete="CASCADE"), index=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
-
-    upload: Mapped[Upload] = relationship(back_populates="alarm_links")
-    segment: Mapped[Segment] = relationship(back_populates="alarm_links")
-    alarm: Mapped[Alarm] = relationship(back_populates="upload_links")
-
-
-def _normalize_dedup_timestamp(value: datetime) -> str:
-    if value.tzinfo is None:
-        normalized = value.replace(tzinfo=UTC)
-    else:
-        normalized = value.astimezone(UTC)
-    return normalized.isoformat().replace("+00:00", "Z")
-
-
 @event.listens_for(Measurement, "before_insert")
 def _populate_measurement_dedup_key(_mapper, connection, target: Measurement) -> None:
     if target.dedup_key:
@@ -450,26 +426,11 @@ def _populate_measurement_dedup_key(_mapper, connection, target: Measurement) ->
             channel_index = int(row[1])
     if source_type is None or channel_index is None:
         raise ValueError("Measurement dedup_key requires a resolved channel")
-    target.dedup_key = f"{_normalize_dedup_timestamp(target.timestamp)}|{source_type}|{channel_index}"
+    target.dedup_key = f"{normalize_dedup_timestamp(target.timestamp)}|{source_type}|{channel_index}"
 
 
 @event.listens_for(NibpEvent, "before_insert")
 def _populate_nibp_dedup_key(_mapper, _connection, target: NibpEvent) -> None:
     if target.dedup_key:
         return
-    target.dedup_key = _normalize_dedup_timestamp(target.timestamp)
-
-
-@event.listens_for(Alarm, "before_insert")
-def _populate_alarm_dedup_key(_mapper, _connection, target: Alarm) -> None:
-    if target.dedup_key:
-        return
-    target.dedup_key = "|".join(
-        [
-            _normalize_dedup_timestamp(target.timestamp),
-            target.alarm_category.value,
-            str(target.flag_hi),
-            str(target.flag_lo),
-            target.message,
-        ]
-    )
+    target.dedup_key = normalize_dedup_timestamp(target.timestamp)

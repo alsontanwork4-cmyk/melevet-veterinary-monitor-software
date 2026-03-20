@@ -9,9 +9,7 @@ from ..config import settings
 
 @lru_cache(maxsize=1)
 def load_channel_map() -> dict[str, dict[str, dict[str, str | None]]]:
-    path = Path(settings.channel_map_path)
-    if not path.is_absolute():
-        path = (Path(__file__).resolve().parents[1] / path).resolve()
+    path = settings.channel_map_file_path
 
     if not path.exists():
         return {}

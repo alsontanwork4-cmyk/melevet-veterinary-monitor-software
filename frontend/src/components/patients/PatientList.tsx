@@ -1,123 +1,115 @@
-import { CSSProperties, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { PatientWithUploadCount } from "../../types/api";
 import { formatDate } from "../../utils/format";
-import { getPatientReportDate } from "../../utils/patientReports";
 import { getAgeFromNotes, getGenderFromNotes } from "../../utils/patientNotes";
+import { getPatientReportDate } from "../../utils/patientReports";
 
 interface PatientListProps {
   patients: PatientWithUploadCount[];
+  page: number;
+  totalPages: number;
+  totalCount: number;
   selectedPatientId: number | null;
   onSelectPatient: (patientId: number) => void;
   onUploadPatient: (patientId: number) => void;
   onEditPatient: (patientId: number) => void;
   onDeletePatient: (patientId: number) => void;
-  deletingPatientId?: number | null;
+  onPageChange: (page: number) => void;
 }
 
 export function PatientList({
   patients,
+  page,
+  totalPages,
+  totalCount,
   selectedPatientId,
   onSelectPatient,
   onUploadPatient,
   onEditPatient,
   onDeletePatient,
-  deletingPatientId = null,
+  onPageChange,
 }: PatientListProps) {
   const [openMenuPatientId, setOpenMenuPatientId] = useState<number | null>(null);
-  const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
-  const listRef = useRef<HTMLDivElement>(null);
-  const triggerRefs = useRef(new Map<number, HTMLButtonElement>());
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [openMenuPosition, setOpenMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const openMenuRef = useRef<HTMLDivElement | null>(null);
+  const openTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (openMenuPatientId === null) {
-      setMenuStyle({});
       return;
     }
 
-    function updateMenuPosition() {
-      if (openMenuPatientId === null) {
-        return;
-      }
-
-      const trigger = triggerRefs.current.get(openMenuPatientId);
-      const menu = menuRef.current;
-      if (!trigger || !menu) {
-        return;
-      }
-
-      const triggerRect = trigger.getBoundingClientRect();
-      const menuRect = menu.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      const gap = 6;
-
-      let top = triggerRect.bottom + gap;
-      let left = triggerRect.right - menuRect.width;
-
-      if (left < 8) {
-        left = 8;
-      } else if (left + menuRect.width > viewportWidth - 8) {
-        left = viewportWidth - menuRect.width - 8;
-      }
-
-      if (top + menuRect.height > viewportHeight - 8) {
-        top = triggerRect.top - menuRect.height - gap;
-      }
-
-      if (top < 8) {
-        top = 8;
-      }
-
-      setMenuStyle({
-        position: "fixed",
-        top,
-        left,
-      });
+    function closeOpenMenu() {
+      setOpenMenuPatientId(null);
+      setOpenMenuPosition(null);
     }
 
-    const frameId = window.requestAnimationFrame(updateMenuPosition);
-    window.addEventListener("resize", updateMenuPosition);
-    window.addEventListener("scroll", updateMenuPosition, true);
-    return () => {
-      window.cancelAnimationFrame(frameId);
-      window.removeEventListener("resize", updateMenuPosition);
-      window.removeEventListener("scroll", updateMenuPosition, true);
-    };
-  }, [openMenuPatientId]);
-
-  useEffect(() => {
-    function onDocumentMouseDown(event: MouseEvent) {
+    function handlePointerDown(event: MouseEvent) {
       if (!(event.target instanceof Node)) {
         return;
       }
-
-      if (menuRef.current?.contains(event.target)) {
+      if (openTriggerRef.current?.contains(event.target)) {
         return;
       }
-
-      const trigger = openMenuPatientId !== null ? triggerRefs.current.get(openMenuPatientId) : null;
-      if (trigger?.contains(event.target)) {
+      if (openMenuRef.current?.contains(event.target)) {
         return;
       }
-
-      setOpenMenuPatientId(null);
+      closeOpenMenu();
     }
 
-    document.addEventListener("mousedown", onDocumentMouseDown);
-    return () => {
-      document.removeEventListener("mousedown", onDocumentMouseDown);
-    };
-  }, []);
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        closeOpenMenu();
+      }
+    }
 
-  const openMenuPatient = openMenuPatientId !== null ? patients.find((patient) => patient.id === openMenuPatientId) ?? null : null;
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+    window.addEventListener("resize", closeOpenMenu);
+    window.addEventListener("scroll", closeOpenMenu, true);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("resize", closeOpenMenu);
+      window.removeEventListener("scroll", closeOpenMenu, true);
+    };
+  }, [openMenuPatientId]);
+
+  function closeMenu() {
+    setOpenMenuPatientId(null);
+    setOpenMenuPosition(null);
+  }
+
+  function toggleMenu(patientId: number, trigger: HTMLButtonElement) {
+    if (openMenuPatientId === patientId) {
+      closeMenu();
+      return;
+    }
+
+    const rect = trigger.getBoundingClientRect();
+    const viewportPadding = 12;
+    const menuWidth = 132;
+    const menuHeight = 126;
+    const left = Math.max(
+      viewportPadding,
+      Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - viewportPadding),
+    );
+    const opensUpward = rect.bottom + 6 + menuHeight > window.innerHeight - viewportPadding;
+    const top = opensUpward ? Math.max(viewportPadding, rect.top - menuHeight - 6) : rect.bottom + 6;
+
+    openTriggerRef.current = trigger;
+    setOpenMenuPatientId(patientId);
+    setOpenMenuPosition({ top, left });
+  }
+
+  const activePatient = openMenuPatientId === null ? null : patients.find((patient) => patient.id === openMenuPatientId) ?? null;
 
   return (
-    <>
-      <div className="card patient-list-card" ref={listRef}>
-        <table className="table">
+    <div className="card patient-list-card">
+      <div className="patient-list-table-shell">
+        <table className="table patient-list-table">
           <thead>
             <tr>
               <th>Patient ID</th>
@@ -128,9 +120,7 @@ export function PatientList({
               <th>Client Name</th>
               <th>Created Date</th>
               <th>Report Date</th>
-              <th className="patient-actions-column-header">
-                <span className="visually-hidden">Actions</span>
-              </th>
+              <th className="patient-actions-column-header">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -149,24 +139,19 @@ export function PatientList({
                 <td>{formatDate(patient.created_at)}</td>
                 <td>{formatDate(getPatientReportDate(patient))}</td>
                 <td className="patient-actions-cell">
-                  <div className="patient-actions-wrapper">
+                  <div className="patient-actions-menu-shell">
                     <button
                       type="button"
                       className="patient-actions-trigger"
-                      aria-label={`Open actions for ${patient.name}`}
-                      ref={(element) => {
-                        if (element) {
-                          triggerRefs.current.set(patient.id, element);
-                        } else {
-                          triggerRefs.current.delete(patient.id);
-                        }
-                      }}
                       onClick={(event) => {
                         event.stopPropagation();
-                        setOpenMenuPatientId((current) => (current === patient.id ? null : patient.id));
+                        toggleMenu(patient.id, event.currentTarget);
                       }}
+                      aria-haspopup="menu"
+                      aria-expanded={openMenuPatientId === patient.id}
+                      aria-label={`Open actions for ${patient.name}`}
                     >
-                      ⋯
+                      ...
                     </button>
                   </div>
                 </td>
@@ -175,52 +160,78 @@ export function PatientList({
           </tbody>
         </table>
       </div>
-      {openMenuPatient &&
-        createPortal(
-          <div
-            ref={menuRef}
-            className="patient-actions-menu"
-            style={menuStyle}
-            role="menu"
-            aria-label={`Actions for ${openMenuPatient.name}`}
+      <div className="patient-list-pagination">
+        <div className="patient-list-summary">
+          Showing {patients.length} of {totalCount} patients
+        </div>
+        <div className="patient-list-pagination-info">Page {page} of {totalPages}</div>
+        <div className="patient-list-pagination-actions">
+          <button type="button" className="button-muted" onClick={() => onPageChange(page - 1)} disabled={page <= 1}>
+            Previous
+          </button>
+          <button
+            type="button"
+            className="button-muted"
+            onClick={() => onPageChange(page + 1)}
+            disabled={page >= totalPages}
           >
-            <button
-              type="button"
-              className="patient-actions-item"
-              role="menuitem"
-              onClick={() => {
-                setOpenMenuPatientId(null);
-                onUploadPatient(openMenuPatient.id);
+            Next
+          </button>
+        </div>
+      </div>
+      {activePatient && openMenuPosition
+        ? createPortal(
+            <div
+              ref={openMenuRef}
+              className="patient-actions-menu"
+              role="menu"
+              aria-label={`Actions for ${activePatient.name}`}
+              style={{
+                position: "fixed",
+                top: `${openMenuPosition.top}px`,
+                left: `${openMenuPosition.left}px`,
               }}
             >
-              Upload files
-            </button>
-            <button
-              type="button"
-              className="patient-actions-item"
-              role="menuitem"
-              onClick={() => {
-                setOpenMenuPatientId(null);
-                onEditPatient(openMenuPatient.id);
-              }}
-            >
-              Edit details
-            </button>
-            <button
-              type="button"
-              className="patient-actions-item patient-actions-item-danger"
-              role="menuitem"
-              onClick={() => {
-                setOpenMenuPatientId(null);
-                onDeletePatient(openMenuPatient.id);
-              }}
-              disabled={deletingPatientId === openMenuPatient.id}
-            >
-              {deletingPatientId === openMenuPatient.id ? "Deleting..." : "Delete patient data"}
-            </button>
-          </div>,
-          document.body,
-        )}
-    </>
+              <button
+                type="button"
+                className="patient-actions-menu-item"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  closeMenu();
+                  onUploadPatient(activePatient.id);
+                }}
+                aria-label={`Upload ${activePatient.name}`}
+              >
+                Upload
+              </button>
+              <button
+                type="button"
+                className="patient-actions-menu-item"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  closeMenu();
+                  onEditPatient(activePatient.id);
+                }}
+                aria-label={`Edit ${activePatient.name}`}
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                className="patient-actions-menu-item patient-actions-menu-item-danger"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  closeMenu();
+                  onDeletePatient(activePatient.id);
+                }}
+                aria-label={`Delete ${activePatient.name}`}
+              >
+                Delete
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
+    </div>
   );
 }

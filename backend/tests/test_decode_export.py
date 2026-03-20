@@ -1,19 +1,19 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 import time
 import zipfile
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from openpyxl import load_workbook
+import pytest
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.database import Base
 from app.models import (
-    Alarm,
-    AlarmCategory,
     Channel,
     Measurement,
     NibpEvent,
@@ -25,8 +25,8 @@ from app.models import (
     UploadStatus,
 )
 from app.routers.decode import router as decode_router
+from app.services import decode_job_service
 from app.services.decode_export_service import (
-    ALARM_WORKBOOK_NAME,
     NIBP_WORKBOOK_NAME,
     TREND_WORKBOOK_NAME,
     build_decode_export_archive,
@@ -38,6 +38,15 @@ app.include_router(decode_router, prefix="/api")
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def clear_decode_jobs() -> None:
+    with decode_job_service._lock:
+        decode_job_service._jobs.clear()
+    yield
+    with decode_job_service._lock:
+        decode_job_service._jobs.clear()
+
+
 def _file_bytes(data_dir, relative_path: str) -> bytes:
     return (data_dir / relative_path).read_bytes()
 
@@ -45,6 +54,14 @@ def _file_bytes(data_dir, relative_path: str) -> bytes:
 def _zip_names(payload: bytes) -> list[str]:
     with zipfile.ZipFile(BytesIO(payload)) as archive:
         return sorted(archive.namelist())
+
+
+def _sheet_headers_from_zip(payload: bytes, workbook_name: str, sheet_name: str) -> list[str]:
+    with zipfile.ZipFile(BytesIO(payload)) as archive:
+        with archive.open(workbook_name) as workbook_file:
+            workbook = load_workbook(BytesIO(workbook_file.read()), read_only=True, data_only=True)
+    worksheet = workbook[sheet_name]
+    return [str(cell) if cell is not None else "" for cell in next(worksheet.iter_rows(min_row=1, max_row=1, values_only=True))]
 
 
 def _wait_for_job(job_id: str, *, timeout_seconds: float = 30.0) -> dict[str, object]:
@@ -75,7 +92,6 @@ def _table_counts(db: Session) -> dict[str, int]:
         "channels": db.scalar(select(func.count(Channel.id))) or 0,
         "measurements": db.scalar(select(func.count(Measurement.id))) or 0,
         "nibp_events": db.scalar(select(func.count(NibpEvent.id))) or 0,
-        "alarms": db.scalar(select(func.count(Alarm.id))) or 0,
     }
 
 
@@ -93,13 +109,10 @@ def _seed_decode_irrelevant_rows(db: Session) -> None:
         progress_total=1,
         trend_frames=1,
         nibp_frames=1,
-        alarm_frames=1,
         trend_sha256=checksum,
         trend_index_sha256=checksum,
         nibp_sha256=checksum,
         nibp_index_sha256=checksum,
-        alarm_sha256=checksum,
-        alarm_index_sha256=checksum,
         combined_hash=checksum,
         detected_local_dates=["2026-03-07"],
         completed_at=datetime(2026, 3, 7, 0, 0, 0, tzinfo=UTC),
@@ -161,18 +174,6 @@ def _seed_decode_irrelevant_rows(db: Session) -> None:
             dedup_key="nibp-seed-1",
         )
     )
-    db.add(
-        Alarm(
-            upload_id=upload.id,
-            segment_id=segment.id,
-            timestamp=datetime(2026, 3, 7, 0, 3, 0),
-            flag_hi=4,
-            flag_lo=2,
-            alarm_category=AlarmCategory.informational,
-            message="Existing alarm",
-            dedup_key="alarm-seed-1",
-        )
-    )
     db.commit()
 
 
@@ -212,7 +213,7 @@ def test_decode_export_returns_expected_zip_for_single_pair(data_dir) -> None:
     assert _zip_names(response.content) == [TREND_WORKBOOK_NAME]
 
 
-def test_decode_export_returns_expected_zip_for_all_pairs(data_dir) -> None:
+def test_decode_export_returns_expected_zip_for_all_supported_pairs(data_dir) -> None:
     response = client.post(
         "/api/decode/export",
         data={"timezone": "Asia/Singapore"},
@@ -221,13 +222,11 @@ def test_decode_export_returns_expected_zip_for_all_pairs(data_dir) -> None:
             "trend_index": ("TrendChartRecord.Index", _file_bytes(data_dir, "Records/TrendChartRecord.Index"), "application/octet-stream"),
             "nibp_data": ("NibpRecord.data", _file_bytes(data_dir, "Records/NibpRecord.data"), "application/octet-stream"),
             "nibp_index": ("NibpRecord.Index", _file_bytes(data_dir, "Records/NibpRecord.Index"), "application/octet-stream"),
-            "alarm_data": ("AlarmRecord.data", _file_bytes(data_dir, "Records/AlarmRecord.data"), "application/octet-stream"),
-            "alarm_index": ("AlarmRecord.Index", _file_bytes(data_dir, "Records/AlarmRecord.Index"), "application/octet-stream"),
         },
     )
 
     assert response.status_code == 200
-    assert _zip_names(response.content) == sorted([TREND_WORKBOOK_NAME, NIBP_WORKBOOK_NAME, ALARM_WORKBOOK_NAME])
+    assert _zip_names(response.content) == sorted([TREND_WORKBOOK_NAME, NIBP_WORKBOOK_NAME])
 
 
 def test_decode_job_reports_progress_and_supports_download(data_dir) -> None:
@@ -256,6 +255,56 @@ def test_decode_job_reports_progress_and_supports_download(data_dir) -> None:
     assert download_response.headers["content-type"] == "application/zip"
     assert _zip_names(download_response.content) == [TREND_WORKBOOK_NAME]
 
+    repeat_download = client.get(f"/api/decode/jobs/{payload['id']}/download")
+    assert repeat_download.status_code == 410
+    assert repeat_download.json()["detail"] == "Decode archive already downloaded. Re-upload files to download again."
+
+
+def test_decode_job_download_returns_conflict_while_processing() -> None:
+    job = decode_job_service.create_decode_job(selected_families=["Trend Chart"])
+
+    response = client.get(f"/api/decode/jobs/{job.id}/download")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Decode job is not ready yet"
+
+
+def test_decode_job_download_returns_conflict_when_failed() -> None:
+    job = decode_job_service.create_decode_job(selected_families=["Trend Chart"])
+    decode_job_service.update_decode_job(
+        job.id,
+        status="error",
+        progress_percent=100,
+        phase="Decode failed",
+        detail="Unable to finish workbook export",
+        error_message="simulated failure",
+    )
+
+    response = client.get(f"/api/decode/jobs/{job.id}/download")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "simulated failure"
+
+
+def test_decode_job_download_returns_gone_when_archive_expires(monkeypatch: pytest.MonkeyPatch) -> None:
+    job = decode_job_service.create_decode_job(selected_families=["Trend Chart"])
+    decode_job_service.update_decode_job(
+        job.id,
+        status="completed",
+        progress_percent=100,
+        phase="Ready to download",
+        detail="Decoded workbooks are ready",
+        archive_bytes=b"archive",
+    )
+
+    expired_now = job.updated_at + decode_job_service.JOB_RETENTION + timedelta(seconds=1)
+    monkeypatch.setattr(decode_job_service, "utcnow", lambda: expired_now)
+
+    response = client.get(f"/api/decode/jobs/{job.id}/download")
+
+    assert response.status_code == 410
+    assert response.json()["detail"] == "Decode archive expired from server memory. Re-upload files to download again."
+
 
 def test_build_decode_export_archive_does_not_mutate_database_rows(data_dir) -> None:
     with _build_session() as db:
@@ -267,8 +316,6 @@ def test_build_decode_export_archive_does_not_mutate_database_rows(data_dir) -> 
             trend_index=_file_bytes(data_dir, "Records/TrendChartRecord.Index"),
             nibp_data=_file_bytes(data_dir, "Records/NibpRecord.data"),
             nibp_index=_file_bytes(data_dir, "Records/NibpRecord.Index"),
-            alarm_data=_file_bytes(data_dir, "Records/AlarmRecord.data"),
-            alarm_index=_file_bytes(data_dir, "Records/AlarmRecord.Index"),
             timezone_name="Asia/Singapore",
         )
 
@@ -276,3 +323,71 @@ def test_build_decode_export_archive_does_not_mutate_database_rows(data_dir) -> 
 
     assert len(archive) > 0
     assert counts_before == counts_after
+
+
+def test_decode_export_workbooks_keep_only_timestamp_utc_columns(data_dir) -> None:
+    archive = build_decode_export_archive(
+        trend_data=_file_bytes(data_dir, "Records/TrendChartRecord.data"),
+        trend_index=_file_bytes(data_dir, "Records/TrendChartRecord.Index"),
+        nibp_data=_file_bytes(data_dir, "Records/NibpRecord.data"),
+        nibp_index=_file_bytes(data_dir, "Records/NibpRecord.Index"),
+        timezone_name="Asia/Singapore",
+    )
+
+    trend_headers = _sheet_headers_from_zip(archive, TREND_WORKBOOK_NAME, "trend_frames")
+    nibp_headers = _sheet_headers_from_zip(archive, NIBP_WORKBOOK_NAME, "Decoded_All")
+    index_headers = _sheet_headers_from_zip(archive, TREND_WORKBOOK_NAME, "index_entries")
+
+    assert "timestamp_utc" in trend_headers
+    assert "timestamp_local" not in trend_headers
+    assert "timestamp_utc" in nibp_headers
+    assert "timestamp_local" not in nibp_headers
+    assert "timestamp_utc" in index_headers
+    assert "timestamp_local" not in index_headers
+
+
+def test_decode_job_purge_enforces_job_count_cap() -> None:
+    with decode_job_service._lock:
+        now = decode_job_service.utcnow()
+        for index in range(decode_job_service.MAX_RETAINED_JOBS + 2):
+            job = decode_job_service.DecodeJob(
+                id=f"job-{index}",
+                status="completed",
+                progress_percent=100,
+                phase="Ready",
+                detail=None,
+                created_at=now - timedelta(seconds=index + 1),
+                updated_at=now - timedelta(seconds=index + 1),
+            )
+            decode_job_service._jobs[job.id] = job
+
+        decode_job_service._purge_expired_jobs()
+
+        assert len(decode_job_service._jobs) == decode_job_service.MAX_RETAINED_JOBS
+        assert "job-21" not in decode_job_service._jobs
+        assert "job-20" not in decode_job_service._jobs
+
+
+def test_decode_job_purge_drops_archives_when_byte_cap_is_exceeded(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(decode_job_service, "MAX_RETAINED_ARCHIVE_BYTES", 10)
+    with decode_job_service._lock:
+        now = decode_job_service.utcnow()
+        for index in range(3):
+            job = decode_job_service.DecodeJob(
+                id=f"archive-job-{index}",
+                status="completed",
+                progress_percent=100,
+                phase="Ready",
+                detail=None,
+                created_at=now - timedelta(seconds=index + 1),
+                updated_at=now - timedelta(seconds=index + 1),
+                archive_bytes=b"abcdef",
+            )
+            decode_job_service._jobs[job.id] = job
+
+        decode_job_service._purge_expired_jobs()
+
+        remaining_archive_bytes = sum(len(job.archive_bytes or b"") for job in decode_job_service._jobs.values())
+        assert remaining_archive_bytes <= decode_job_service.MAX_RETAINED_ARCHIVE_BYTES
+        assert decode_job_service._jobs["archive-job-2"].archive_bytes is None
+        assert decode_job_service._jobs["archive-job-0"].archive_bytes == b"abcdef"

@@ -1,5 +1,6 @@
 import csv
 import io
+import zipfile
 from collections import defaultdict
 from datetime import UTC, datetime
 
@@ -8,8 +9,10 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..schemas import BulkEncounterExportRequest
+from ..utils import coerce_utc_naive
 from ..services.encounter_service import encounter_day_window, get_encounter
-from ..services.chart_service import list_alarms, list_nibp_events, list_upload_measurements
+from ..services.chart_service import list_nibp_events, list_upload_measurements
 
 
 router = APIRouter(tags=["export"])
@@ -21,12 +24,6 @@ CORE_NIBP_EXPORT_COLUMNS: tuple[tuple[str, str], ...] = (
 )
 
 
-def _normalize_utc_naive(timestamp: datetime | None) -> datetime | None:
-    if timestamp is None:
-        return None
-    if timestamp.tzinfo is None:
-        return timestamp
-    return timestamp.astimezone(UTC).replace(tzinfo=None)
 
 
 def _csv_stream(rows: list[list[str]]):
@@ -39,6 +36,13 @@ def _csv_stream(rows: list[list[str]]):
         output.truncate(0)
 
 
+def _csv_bytes(rows: list[list[str]]) -> bytes:
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerows(rows)
+    return output.getvalue().encode("utf-8")
+
+
 def _build_upload_export_rows(
     *,
     db: Session,
@@ -48,10 +52,9 @@ def _build_upload_export_rows(
     from_ts: datetime | None,
     to_ts: datetime | None,
     include_nibp: bool,
-    include_alarms: bool,
 ) -> list[list[str]]:
-    from_ts = _normalize_utc_naive(from_ts)
-    to_ts = _normalize_utc_naive(to_ts)
+    from_ts = coerce_utc_naive(from_ts)
+    to_ts = coerce_utc_naive(to_ts)
     channel_ids = [int(token) for token in channels.split(",") if token.strip()] if channels else []
 
     measurement_rows = list_upload_measurements(
@@ -91,30 +94,12 @@ def _build_upload_export_rows(
                     values[value_key] = f"{value:g}"
             nibp_by_timestamp[event.timestamp] = values
 
-    alarms_by_timestamp: dict[datetime, str] = defaultdict(str)
-    if include_alarms:
-        alarms = list_alarms(
-            db,
-            upload_id=upload_id,
-            segment_id=segment_id,
-            category=None,
-            from_ts=from_ts,
-            to_ts=to_ts,
-        )
-        for alarm in alarms:
-            existing = alarms_by_timestamp[alarm.timestamp]
-            alarms_by_timestamp[alarm.timestamp] = (
-                f"{existing} | {alarm.message}" if existing else alarm.message
-            )
-
     header = ["timestamp"] + [channel_names_by_id[channel_id] for channel_id in channel_set]
     if include_nibp:
         header.extend(column_name for _, column_name in CORE_NIBP_EXPORT_COLUMNS)
-    if include_alarms:
-        header.append("alarms")
 
     rows: list[list[str]] = [header]
-    all_timestamps = sorted(set(rows_by_timestamp.keys()) | set(nibp_by_timestamp.keys()) | set(alarms_by_timestamp.keys()))
+    all_timestamps = sorted(set(rows_by_timestamp.keys()) | set(nibp_by_timestamp.keys()))
 
     for ts in all_timestamps:
         row = [ts.isoformat()]
@@ -123,8 +108,6 @@ def _build_upload_export_rows(
         if include_nibp:
             nibp_values = nibp_by_timestamp.get(ts, {})
             row.extend(nibp_values.get(value_key, "") for value_key, _column_name in CORE_NIBP_EXPORT_COLUMNS)
-        if include_alarms:
-            row.append(alarms_by_timestamp.get(ts, ""))
         rows.append(row)
 
     return rows
@@ -138,7 +121,6 @@ def export_csv(
     from_ts: datetime | None = Query(default=None),
     to_ts: datetime | None = Query(default=None),
     include_nibp: bool = Query(default=True),
-    include_alarms: bool = Query(default=True),
     db: Session = Depends(get_db),
 ):
     rows = _build_upload_export_rows(
@@ -149,7 +131,6 @@ def export_csv(
         from_ts=from_ts,
         to_ts=to_ts,
         include_nibp=include_nibp,
-        include_alarms=include_alarms,
     )
     filename = f"upload_{upload_id}.csv"
     return StreamingResponse(
@@ -164,7 +145,6 @@ def export_encounter_csv(
     encounter_id: int,
     channels: str | None = Query(default=None),
     include_nibp: bool = Query(default=True),
-    include_alarms: bool = Query(default=True),
     db: Session = Depends(get_db),
 ):
     encounter = get_encounter(db, encounter_id)
@@ -180,11 +160,47 @@ def export_encounter_csv(
         from_ts=from_ts,
         to_ts=to_ts,
         include_nibp=include_nibp,
-        include_alarms=include_alarms,
     )
     filename = f"encounter_{encounter_id}.csv"
     return StreamingResponse(
         _csv_stream(rows),
         media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.post("/encounters/export-zip")
+def export_bulk_encounter_csv(
+    payload: BulkEncounterExportRequest,
+    db: Session = Depends(get_db),
+):
+    archive_buffer = io.BytesIO()
+    with zipfile.ZipFile(archive_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for encounter_id in payload.encounter_ids:
+            encounter = get_encounter(db, encounter_id)
+            if encounter is None:
+                raise HTTPException(status_code=404, detail=f"Encounter not found: {encounter_id}")
+
+            from_ts, to_ts = encounter_day_window(encounter.encounter_date_local, encounter.timezone)
+            rows = _build_upload_export_rows(
+                db=db,
+                upload_id=encounter.upload_id,
+                segment_id=None,
+                channels=None,
+                from_ts=from_ts,
+                to_ts=to_ts,
+                include_nibp=payload.include_nibp,
+            )
+            archive.writestr(
+                f"encounter_{encounter_id}_{encounter.encounter_date_local.isoformat()}.csv",
+                _csv_bytes(rows),
+            )
+
+    archive_buffer.seek(0)
+    timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    filename = f"encounter_exports_{timestamp}.zip"
+    return StreamingResponse(
+        archive_buffer,
+        media_type="application/zip",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )

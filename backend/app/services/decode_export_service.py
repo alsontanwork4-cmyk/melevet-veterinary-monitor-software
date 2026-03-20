@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import Counter
 from datetime import UTC, datetime
 from io import BytesIO
 import zipfile
@@ -11,44 +10,30 @@ from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 
 from ..config import settings
-from ..parsers.alarm_parser import AlarmFrame, parse_alarm_frames
-from ..parsers.index_parser import IndexEntry, ParsedIndex, parse_index_bytes
+from ..parsers.index_parser import ParsedIndex, parse_index_bytes
 from ..parsers.nibp_parser import CHANNEL_COUNT as NIBP_CHANNEL_COUNT
 from ..parsers.nibp_parser import nibp_channel_name, parse_nibp_frames
 from ..parsers.trend_parser import CHANNEL_COUNT as TREND_CHANNEL_COUNT
 from ..parsers.trend_parser import FRAME_SIZE as TREND_FRAME_SIZE
 from ..parsers.trend_parser import PAYLOAD_SIZE as TREND_PAYLOAD_SIZE
 from ..parsers.trend_parser import parse_trend_frames
-from .encounter_service import resolve_timezone
-
+from ..utils import coerce_utc
 
 TREND_WORKBOOK_NAME = "TrendChartRecord_decoded.xlsx"
 NIBP_WORKBOOK_NAME = "NibpRecord_decoded.xlsx"
-ALARM_WORKBOOK_NAME = "AlarmRecord_decoded.xlsx"
 ProgressCallback = Callable[[int, str, str | None], None]
 
 
-def _normalize_timestamp(timestamp: datetime) -> datetime:
-    if timestamp.tzinfo is None:
-        return timestamp.replace(tzinfo=UTC)
-    return timestamp.astimezone(UTC)
-
-
 def _timestamp_unix(timestamp: datetime) -> int:
-    return int(_normalize_timestamp(timestamp).timestamp())
+    return int(coerce_utc(timestamp).timestamp())
 
 
 def _timestamp_utc_text(timestamp: datetime) -> str:
-    return _normalize_timestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _timestamp_local_text(timestamp: datetime, timezone_name: str) -> str:
-    tz = resolve_timezone(timezone_name)
-    return _normalize_timestamp(timestamp).astimezone(tz).strftime("%Y-%m-%d %H:%M:%S")
+    return coerce_utc(timestamp).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _is_current_2025_2026(timestamp: datetime) -> bool:
-    normalized = _normalize_timestamp(timestamp)
+    normalized = coerce_utc(timestamp)
     return normalized.year in {2025, 2026}
 
 
@@ -106,7 +91,7 @@ def _build_workbook(
     return buffer.getvalue()
 
 
-def _index_sheet_rows(parsed_index: ParsedIndex, timezone_name: str) -> list[list[object]]:
+def _index_sheet_rows(parsed_index: ParsedIndex) -> list[list[object]]:
     rollback_set = set(parsed_index.rollback_indices)
     rows: list[list[object]] = []
     for entry in parsed_index.entries:
@@ -119,7 +104,6 @@ def _index_sheet_rows(parsed_index: ParsedIndex, timezone_name: str) -> list[lis
                 entry.ts_hi,
                 entry.unix_seconds,
                 _timestamp_utc_text(entry.timestamp_utc),
-                _timestamp_local_text(entry.timestamp_utc, timezone_name),
                 entry.frame_index in rollback_set,
             ]
         )
@@ -163,7 +147,6 @@ def _build_trend_workbook(
         ["index_entry_count", len(parsed_index.entries)],
         ["index_timestamp_rollback_count", len(parsed_index.rollback_indices)],
         ["index_trailer_hex", parsed_index.trailer.hex()],
-        ["timezone_used", timezone_name],
     ]
 
     index_header_rows = [
@@ -176,7 +159,7 @@ def _build_trend_workbook(
         ["trailer_hex", parsed_index.trailer.hex()],
     ]
 
-    trend_frame_headers = ["frame_index", "ptr", "timestamp_utc", "timestamp_local", *_trend_channel_headers(), "frame_tail_hex"]
+    trend_frame_headers = ["frame_index", "ptr", "timestamp_utc", *_trend_channel_headers(), "frame_tail_hex"]
     trend_frame_rows: list[list[object]] = []
     for frame, entry in zip(frames, parsed_index.entries, strict=True):
         frame_offset = frame.frame_index * TREND_FRAME_SIZE
@@ -186,7 +169,6 @@ def _build_trend_workbook(
                 frame.frame_index,
                 entry.ptr,
                 _timestamp_utc_text(frame.timestamp),
-                _timestamp_local_text(frame.timestamp, timezone_name),
                 *frame.values,
                 frame_tail_hex,
             ]
@@ -200,7 +182,6 @@ def _build_trend_workbook(
         "ts_hi",
         "unix_seconds",
         "timestamp_utc",
-        "timestamp_local",
         "is_rollback",
     ]
 
@@ -210,7 +191,7 @@ def _build_trend_workbook(
         [
             ("decode_notes", decode_notes_rows[0], decode_notes_rows[1:]),
             ("index_header", index_header_rows[0], index_header_rows[1:]),
-            ("index_entries", index_entry_headers, _index_sheet_rows(parsed_index, timezone_name)),
+            ("index_entries", index_entry_headers, _index_sheet_rows(parsed_index)),
             ("trend_frames", trend_frame_headers, trend_frame_rows),
         ],
         progress=(
@@ -241,7 +222,6 @@ def _build_nibp_workbook(
         "index_ptr",
         "timestamp_unix",
         "timestamp_utc",
-        "timestamp_local",
         "has_measurement",
         "bp_systolic_inferred",
         "bp_mean_inferred",
@@ -259,7 +239,6 @@ def _build_nibp_workbook(
             entry.ptr,
             _timestamp_unix(frame.timestamp),
             _timestamp_utc_text(frame.timestamp),
-            _timestamp_local_text(frame.timestamp, timezone_name),
             frame.has_measurement,
             frame.channel_values.get("bp_systolic_inferred"),
             frame.channel_values.get("bp_mean_inferred"),
@@ -273,7 +252,6 @@ def _build_nibp_workbook(
             [
                 frame.frame_index,
                 _timestamp_utc_text(frame.timestamp),
-                _timestamp_local_text(frame.timestamp, timezone_name),
                 nibp_data[frame_offset : frame_offset + TREND_FRAME_SIZE].hex().upper(),
             ]
         )
@@ -299,10 +277,9 @@ def _build_nibp_workbook(
         ["Decode", "bp_diastolic_inferred", "inferred", "Mapped from the backend NIBP parser inferred diastolic field."],
         ["Quality", "current_2025_2026_records", len(current_rows), "Rows whose UTC year falls in 2025 or 2026."],
         ["Quality", "records_with_bp_triplet", len(bp_rows), "Rows where all three inferred BP values are present."],
-        ["Runtime", "timezone_used", timezone_name, "Used for the timestamp_local columns."],
     ]
 
-    raw_hex_headers = ["record_index", "timestamp_utc", "timestamp_local", "raw_hex"]
+    raw_hex_headers = ["record_index", "timestamp_utc", "raw_hex"]
     index_headers = [
         "frame_index",
         "flags",
@@ -311,7 +288,6 @@ def _build_nibp_workbook(
         "ts_hi",
         "unix_seconds",
         "timestamp_utc",
-        "timestamp_local",
         "is_rollback",
     ]
 
@@ -322,118 +298,12 @@ def _build_nibp_workbook(
             ("Decoded_All", all_headers, all_rows),
             ("Decoded_Current", all_headers, current_rows),
             ("Decoded_With_BP", all_headers, bp_rows),
-            ("Index", index_headers, _index_sheet_rows(parsed_index, timezone_name)),
+            ("Index", index_headers, _index_sheet_rows(parsed_index)),
             ("Notes", note_headers, note_rows),
             ("RawHex", raw_hex_headers, raw_hex_rows),
         ],
         progress=(
             (lambda fraction: progress_callback(0.45 + (fraction * 0.55), "Writing NIBP workbook"))
-            if progress_callback is not None
-            else None
-        ),
-    )
-
-
-def _alarm_row(alarm: AlarmFrame, index_entry: IndexEntry, timezone_name: str) -> list[object]:
-    return [
-        alarm.frame_index,
-        alarm.frame_index * TREND_FRAME_SIZE,
-        _timestamp_unix(alarm.timestamp),
-        _timestamp_utc_text(alarm.timestamp),
-        _timestamp_local_text(alarm.timestamp, timezone_name),
-        alarm.flag_hi,
-        alarm.flag_lo,
-        alarm.category.value,
-        alarm.alarm_sub_id,
-        alarm.message,
-        index_entry.flags,
-        index_entry.ptr,
-        index_entry.ts_lo,
-        index_entry.ts_hi,
-    ]
-
-
-def _build_alarm_workbook(
-    *,
-    alarm_data: bytes,
-    alarm_index: bytes,
-    timezone_name: str,
-    progress_callback: Callable[[float, str], None] | None = None,
-) -> bytes:
-    if progress_callback is not None:
-        progress_callback(0.05, "Reading Alarm index")
-    parsed_index = parse_index_bytes(alarm_index, alarm_data, require_monotonic=False)
-    if progress_callback is not None:
-        progress_callback(0.2, "Parsing Alarm records")
-    alarms = parse_alarm_frames(alarm_data, parsed_index)
-
-    raw_headers = [
-        "frame_index",
-        "byte_offset",
-        "timestamp_unix",
-        "timestamp_utc",
-        "timestamp_local",
-        "flag_hi",
-        "flag_lo",
-        "category",
-        "alarm_sub_id",
-        "message",
-        "index_flags",
-        "index_ptr",
-        "index_ts_lo",
-        "index_ts_hi",
-    ]
-    alarms_raw_rows = [_alarm_row(alarm, parsed_index.entries[alarm.frame_index], timezone_name) for alarm in alarms]
-    alarms_chronological_rows = sorted(
-        alarms_raw_rows,
-        key=lambda row: (row[2], row[0]),
-    )
-
-    category_counts = Counter(alarm.category.value for alarm in alarms)
-    category_rows = [[category, count] for category, count in category_counts.most_common()]
-
-    message_counts = Counter(alarm.message for alarm in alarms if alarm.message)
-    message_rows = [[message, count] for message, count in message_counts.most_common(50)]
-
-    note_headers = ["field", "value"]
-    note_rows = [
-        ["source", "stateless decode export"],
-        ["decoded_frame_count", len(alarms)],
-        ["header_version", parsed_index.header.version],
-        ["header_buffer_size", parsed_index.header.buffer_size],
-        ["header_payload_size", parsed_index.header.payload_size],
-        ["header_padding", parsed_index.header.padding],
-        ["index_trailer_hex", parsed_index.trailer.hex()],
-        ["rollback_count", len(parsed_index.rollback_indices)],
-        ["rollback_indices", ",".join(str(index) for index in parsed_index.rollback_indices)],
-        ["timezone_used", timezone_name],
-    ]
-
-    index_headers = [
-        "frame_index",
-        "flags",
-        "ptr",
-        "ts_lo",
-        "ts_hi",
-        "unix_seconds",
-        "timestamp_utc",
-        "timestamp_local",
-        "is_rollback",
-    ]
-
-    if progress_callback is not None:
-        progress_callback(0.45, "Preparing Alarm workbook rows")
-    return _build_workbook(
-        [
-            ("alarms_raw_order", raw_headers, alarms_raw_rows),
-            ("alarms_chronological", raw_headers, alarms_chronological_rows),
-            ("index_entries", index_headers, _index_sheet_rows(parsed_index, timezone_name)),
-            ("category_summary", ["category", "count"], category_rows),
-            ("top_messages", ["message", "count"], message_rows),
-            ("notes", note_headers, note_rows),
-        ],
-        progress=(
-            (lambda fraction: progress_callback(0.45 + (fraction * 0.55), "Writing Alarm workbook"))
             if progress_callback is not None
             else None
         ),
@@ -446,15 +316,12 @@ def build_decode_export_archive(
     trend_index: bytes | None = None,
     nibp_data: bytes | None = None,
     nibp_index: bytes | None = None,
-    alarm_data: bytes | None = None,
-    alarm_index: bytes | None = None,
     timezone_name: str = "UTC",
     progress_callback: ProgressCallback | None = None,
 ) -> bytes:
     selected_families = [
         ("Trend Chart", TREND_WORKBOOK_NAME, trend_data is not None and trend_index is not None),
         ("NIBP", NIBP_WORKBOOK_NAME, nibp_data is not None and nibp_index is not None),
-        ("Alarm", ALARM_WORKBOOK_NAME, alarm_data is not None and alarm_index is not None),
     ]
     active_families = [(label, filename) for label, filename, is_selected in selected_families if is_selected]
 
@@ -497,24 +364,6 @@ def build_decode_export_archive(
                             round(((completed_families + fraction) / family_count) * 95),
                             phase,
                             "Decoding NIBP files",
-                        )
-                    ),
-                ),
-            )
-            completed_families += 1
-        if alarm_data is not None and alarm_index is not None:
-            family_count = max(1, len(active_families))
-            zip_file.writestr(
-                ALARM_WORKBOOK_NAME,
-                _build_alarm_workbook(
-                    alarm_data=alarm_data,
-                    alarm_index=alarm_index,
-                    timezone_name=timezone_name,
-                    progress_callback=(
-                        lambda fraction, phase: report(
-                            round(((completed_families + fraction) / family_count) * 95),
-                            phase,
-                            "Decoding Alarm files",
                         )
                     ),
                 ),

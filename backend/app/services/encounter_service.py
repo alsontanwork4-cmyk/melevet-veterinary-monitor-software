@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta, timezone, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -8,11 +9,15 @@ from sqlalchemy.orm import Session, selectinload
 
 from ..config import settings
 from ..models import Encounter, Patient, RecordingPeriod, Upload, UploadStatus
+from ..utils import coerce_utc, coerce_utc_naive, utcnow
+from .audit_service import log_audit_event
 from .patient_service import prune_orphaned_canonical_rows
 
 
-def _utcnow() -> datetime:
-    return datetime.now(UTC)
+@dataclass(frozen=True)
+class PaginatedEncounterHistoryResult:
+    items: list[Encounter]
+    total: int
 
 
 def resolve_timezone(timezone_name: str) -> tzinfo:
@@ -28,21 +33,12 @@ def resolve_timezone(timezone_name: str) -> tzinfo:
         ) from exc
 
 
-def _coerce_to_utc_aware(timestamp: datetime) -> datetime:
-    if timestamp.tzinfo is None:
-        return timestamp.replace(tzinfo=UTC)
-    return timestamp.astimezone(UTC)
-
-
-def _utc_naive(timestamp: datetime) -> datetime:
-    return _coerce_to_utc_aware(timestamp).replace(tzinfo=None)
-
-
 def encounter_day_window(encounter_date_local: date, timezone_name: str) -> tuple[datetime, datetime]:
     tz = resolve_timezone(timezone_name)
     local_start = datetime.combine(encounter_date_local, time.min, tzinfo=tz)
     local_end = local_start + timedelta(days=1) - timedelta(microseconds=1)
-    return _utc_naive(local_start), _utc_naive(local_end)
+    return coerce_utc_naive(local_start), coerce_utc_naive(local_end)
+
 
 
 def _expand_dates_between(start_date: date, end_date: date) -> list[str]:
@@ -60,8 +56,8 @@ def detected_local_dates_for_ranges(
     tz = resolve_timezone(timezone_name)
     local_dates: set[str] = set()
     for start_time, end_time in ranges:
-        local_start = _coerce_to_utc_aware(start_time).astimezone(tz).date()
-        local_end = _coerce_to_utc_aware(end_time).astimezone(tz).date()
+        local_start = coerce_utc(start_time).astimezone(tz).date()
+        local_end = coerce_utc(end_time).astimezone(tz).date()
         local_dates.update(_expand_dates_between(local_start, local_end))
     return sorted(local_dates)
 
@@ -80,6 +76,25 @@ def list_patient_encounters(db: Session, patient_id: int) -> list[Encounter]:
             .order_by(Encounter.encounter_date_local.desc(), Encounter.updated_at.desc(), Encounter.id.desc())
         )
     )
+
+
+def list_patient_encounters_page(
+    db: Session,
+    *,
+    patient_id: int,
+    limit: int,
+    offset: int,
+) -> PaginatedEncounterHistoryResult:
+    total = int(db.scalar(select(func.count(Encounter.id)).where(Encounter.patient_id == patient_id)) or 0)
+    items = db.scalars(
+        select(Encounter)
+        .options(selectinload(Encounter.upload))
+        .where(Encounter.patient_id == patient_id)
+        .order_by(Encounter.encounter_date_local.desc(), Encounter.updated_at.desc(), Encounter.id.desc())
+        .offset(offset)
+        .limit(limit)
+    ).all()
+    return PaginatedEncounterHistoryResult(items=list(items), total=total)
 
 
 def list_patient_available_report_dates(
@@ -158,7 +173,7 @@ def _set_upload_superseded(db: Session, upload_id: int) -> None:
     upload = db.get(Upload, upload_id)
     if upload is None:
         return
-    upload.superseded_at = _utcnow()
+    upload.superseded_at = utcnow()
     db.add(upload)
     db.commit()
 
@@ -168,6 +183,7 @@ def delete_upload_if_orphaned(
     upload_id: int,
     *,
     immediate: bool = False,
+    actor: str = "system",
 ) -> bool:
     upload = db.get(Upload, upload_id)
     if upload is None:
@@ -181,11 +197,24 @@ def delete_upload_if_orphaned(
         reference_time = upload.completed_at or upload.upload_time
         if reference_time is None:
             return False
-        if _coerce_to_utc_aware(_utcnow()) - _coerce_to_utc_aware(reference_time) < timedelta(
+        if coerce_utc(utcnow()) - coerce_utc(reference_time) < timedelta(
             days=max(1, settings.orphan_upload_retention_days)
         ):
             return False
 
+    log_audit_event(
+        db,
+        action="deleted",
+        entity_type="upload",
+        entity_id=upload.id,
+        actor=actor,
+        details={
+            "patient_id": upload.patient_id,
+            "combined_hash": upload.combined_hash,
+            "status": upload.status.value,
+            "reason": "orphaned-upload-cleanup",
+        },
+    )
     db.delete(upload)
     db.flush()
     prune_orphaned_canonical_rows(db)
@@ -199,7 +228,7 @@ def purge_stale_orphan_uploads(db: Session) -> int:
     for upload in uploads:
         if upload.encounters:
             continue
-        if delete_upload_if_orphaned(db, upload.id, immediate=False):
+        if delete_upload_if_orphaned(db, upload.id, immediate=False, actor="system"):
             deleted += 1
     return deleted
 
@@ -213,6 +242,7 @@ def create_or_replace_encounter(
     timezone_name: str,
     label: str | None,
     notes: str | None,
+    actor: str = "system",
 ) -> Encounter:
     if upload.status != UploadStatus.completed:
         raise ValueError("Upload must be completed before creating an encounter")
@@ -240,6 +270,21 @@ def create_or_replace_encounter(
         db.add(encounter)
         db.commit()
         db.refresh(encounter)
+        log_audit_event(
+            db,
+            action="created",
+            entity_type="encounter",
+            entity_id=encounter.id,
+            actor=actor,
+            details={
+                "patient_id": patient.id,
+                "upload_id": upload.id,
+                "encounter_date_local": encounter.encounter_date_local.isoformat(),
+                "timezone": encounter.timezone,
+            },
+            commit=True,
+        )
+        db.refresh(encounter)
         return encounter
 
     previous_upload_id = existing.upload_id
@@ -250,10 +295,29 @@ def create_or_replace_encounter(
     db.add(existing)
     db.commit()
     db.refresh(existing)
+    log_audit_event(
+        db,
+        action="updated",
+        entity_type="encounter",
+        entity_id=existing.id,
+        actor=actor,
+        details={
+            "patient_id": patient.id,
+            "previous_upload_id": previous_upload_id,
+            "upload_id": upload.id,
+            "encounter_date_local": existing.encounter_date_local.isoformat(),
+            "timezone": existing.timezone,
+        },
+        commit=True,
+    )
+    db.refresh(existing)
 
     if previous_upload_id != upload.id:
         _set_upload_superseded(db, previous_upload_id)
-        delete_upload_if_orphaned(db, previous_upload_id, immediate=True)
+        delete_upload_if_orphaned(db, previous_upload_id, immediate=True, actor=actor)
+        from .upload_maintenance_service import run_opportunistic_maintenance
+
+        run_opportunistic_maintenance(bind=db.get_bind())
 
     return existing
 
@@ -266,7 +330,14 @@ def update_encounter(
     timezone_name: str | None,
     label: str | None,
     notes: str | None,
+    actor: str = "system",
 ) -> Encounter:
+    previous_values = {
+        "encounter_date_local": encounter.encounter_date_local.isoformat(),
+        "timezone": encounter.timezone,
+        "label": encounter.label,
+        "notes": encounter.notes,
+    }
     next_date = encounter_date_local or encounter.encounter_date_local
     if next_date != encounter.encounter_date_local:
         detected_dates = encounter.upload.detected_local_dates if encounter.upload is not None else []
@@ -294,15 +365,48 @@ def update_encounter(
     db.add(encounter)
     db.commit()
     db.refresh(encounter)
+    log_audit_event(
+        db,
+        action="updated",
+        entity_type="encounter",
+        entity_id=encounter.id,
+        actor=actor,
+        details={
+            "previous_values": previous_values,
+            "encounter_date_local": encounter.encounter_date_local.isoformat(),
+            "timezone": encounter.timezone,
+            "label": encounter.label,
+        },
+        commit=True,
+    )
+    db.refresh(encounter)
     return encounter
 
 
-def delete_encounter(db: Session, encounter: Encounter) -> None:
+def delete_encounter(db: Session, encounter: Encounter, *, actor: str = "system") -> None:
     upload_id = encounter.upload_id
+    encounter_details = {
+        "patient_id": encounter.patient_id,
+        "upload_id": encounter.upload_id,
+        "encounter_date_local": encounter.encounter_date_local.isoformat(),
+        "timezone": encounter.timezone,
+        "label": encounter.label,
+    }
     patient = db.get(Patient, encounter.patient_id)
     if patient is not None and patient.preferred_encounter_id == encounter.id:
         patient.preferred_encounter_id = None
         db.add(patient)
     db.delete(encounter)
+    log_audit_event(
+        db,
+        action="deleted",
+        entity_type="encounter",
+        entity_id=encounter.id,
+        actor=actor,
+        details=encounter_details,
+    )
     db.commit()
-    delete_upload_if_orphaned(db, upload_id, immediate=True)
+    delete_upload_if_orphaned(db, upload_id, immediate=True, actor=actor)
+    from .upload_maintenance_service import run_opportunistic_maintenance
+
+    run_opportunistic_maintenance(bind=db.get_bind())

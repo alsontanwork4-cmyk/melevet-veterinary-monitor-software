@@ -9,6 +9,10 @@ from app.parsers.trend_parser import parse_trend_frames
 
 
 def _read(path):
+    if not path.exists():
+        records_path = path.parent / "Records" / path.name
+        if records_path.exists():
+            path = records_path
     return path.read_bytes()
 
 

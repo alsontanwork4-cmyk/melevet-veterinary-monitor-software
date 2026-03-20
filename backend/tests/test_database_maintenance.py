@@ -61,7 +61,7 @@ def test_sqlite_upload_maintenance_backfills_combined_hash_and_index(tmp_path) -
 
     ensure_sqlite_upload_progress_columns(bind=engine, database_url=f"sqlite+pysqlite:///{db_path}")
 
-    expected = hashlib.sha256("trend|trend-index|nibp|nibp-index|alarm|alarm-index".encode("utf-8")).hexdigest()
+    expected = hashlib.sha256("trend|trend-index|nibp|nibp-index".encode("utf-8")).hexdigest()
 
     with engine.begin() as connection:
         combined_hash = connection.exec_driver_sql("SELECT combined_hash FROM uploads WHERE id = 1").scalar_one()
@@ -127,23 +127,6 @@ def test_sqlite_core_storage_compaction_prunes_rows_and_rebuilds_schema(tmp_path
         )
         connection.exec_driver_sql(
             """
-            CREATE TABLE alarms (
-                id INTEGER PRIMARY KEY,
-                upload_id INTEGER NOT NULL,
-                segment_id INTEGER NOT NULL,
-                timestamp DATETIME NOT NULL,
-                flag_hi INTEGER NOT NULL,
-                flag_lo INTEGER NOT NULL,
-                alarm_category TEXT NOT NULL,
-                alarm_sub_id INTEGER NULL,
-                message TEXT NOT NULL,
-                frame_index INTEGER NOT NULL
-            )
-            """
-        )
-
-        connection.exec_driver_sql(
-            """
             INSERT INTO channels (
                 id, upload_id, source_type, channel_index, name, unit, valid_count, invalid_count, min_val, max_val, mean_val, unique_count
             ) VALUES
@@ -189,13 +172,6 @@ def test_sqlite_core_storage_compaction_prunes_rows_and_rebuilds_schema(tmp_path
             """,
             (bloated_payload,),
         )
-        connection.exec_driver_sql(
-            """
-            INSERT INTO alarms (id, upload_id, segment_id, timestamp, flag_hi, flag_lo, alarm_category, alarm_sub_id, message, frame_index)
-            VALUES (1, 1, 1, '2026-01-01T00:02:00', 1, 0, 'informational', NULL, 'alarm message', 0)
-            """
-        )
-
     size_before = db_path.stat().st_size
 
     changed = ensure_sqlite_core_storage_compaction(bind=engine, database_url=f"sqlite+pysqlite:///{db_path}")
@@ -204,7 +180,6 @@ def test_sqlite_core_storage_compaction_prunes_rows_and_rebuilds_schema(tmp_path
         channel_columns = [row[1] for row in connection.exec_driver_sql("PRAGMA table_info(channels)").fetchall()]
         measurement_columns = [row[1] for row in connection.exec_driver_sql("PRAGMA table_info(measurements)").fetchall()]
         nibp_columns = [row[1] for row in connection.exec_driver_sql("PRAGMA table_info(nibp_events)").fetchall()]
-        alarm_columns = [row[1] for row in connection.exec_driver_sql("PRAGMA table_info(alarms)").fetchall()]
         user_version = connection.exec_driver_sql("PRAGMA user_version").scalar_one()
 
         channels = connection.exec_driver_sql(
@@ -216,15 +191,10 @@ def test_sqlite_core_storage_compaction_prunes_rows_and_rebuilds_schema(tmp_path
         nibp_row = connection.exec_driver_sql(
             "SELECT channel_values, has_measurement FROM nibp_events WHERE id = 1"
         ).fetchone()
-        alarms = connection.exec_driver_sql(
-            "SELECT flag_hi, flag_lo, alarm_category, message FROM alarms WHERE id = 1"
-        ).fetchall()
-
     assert changed is True
     assert channel_columns == ["id", "upload_id", "source_type", "channel_index", "name", "unit", "valid_count"]
     assert measurement_columns == ["id", "upload_id", "segment_id", "channel_id", "timestamp", "value"]
     assert nibp_columns == ["id", "upload_id", "segment_id", "timestamp", "channel_values", "has_measurement"]
-    assert alarm_columns == ["id", "upload_id", "segment_id", "timestamp", "flag_hi", "flag_lo", "alarm_category", "message"]
     assert user_version == COMPACT_STORAGE_USER_VERSION
 
     assert channels == [
@@ -242,7 +212,6 @@ def test_sqlite_core_storage_compaction_prunes_rows_and_rebuilds_schema(tmp_path
         "bp_diastolic_inferred": 90,
     }
     assert nibp_row[1] == 1
-    assert alarms == [(1, 0, "informational", "alarm message")]
     assert db_path.stat().st_size < size_before
 
 

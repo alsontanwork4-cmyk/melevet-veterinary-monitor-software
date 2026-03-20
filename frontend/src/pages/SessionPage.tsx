@@ -2,10 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 
-import { getAlarms, getChannels, getNibpEvents, getPatient, getPeriods, getSegments, getUpload } from "../api/endpoints";
+import { downloadArchive, getChannels, getNibpEvents, getPatient, getPeriods, getSegments, getUpload } from "../api/endpoints";
+import { HelpTip } from "../components/help/HelpTip";
 import { Breadcrumb } from "../components/layout/Breadcrumb";
-import { AlarmTable } from "../components/alarms/AlarmTable";
-import { AlarmMarkers } from "../components/session/AlarmMarkers";
 import { CsvExportButton } from "../components/session/CsvExportButton";
 import { NibpOverlay } from "../components/session/NibpOverlay";
 import { PeriodSelector } from "../components/session/PeriodSelector";
@@ -13,8 +12,9 @@ import { SegmentSelector } from "../components/session/SegmentSelector";
 import { TrendChart } from "../components/session/TrendChart";
 import { VitalSelector } from "../components/session/VitalSelector";
 import { WindowSelector } from "../components/session/WindowSelector";
+import { helpTips } from "../content/helpContent";
 import { useChartData } from "../hooks/useChartData";
-import { formatNumber } from "../utils/format";
+import { formatDateTime, formatNumber } from "../utils/format";
 import { buildSegmentWindowQuery } from "../utils/sessionWindowQuery";
 import {
   channelDisplayLabel,
@@ -39,6 +39,17 @@ function latestNumericValue(points: Array<{ value: number | null }>): number | n
     }
   }
   return null;
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(objectUrl);
 }
 
 export function SessionPage() {
@@ -72,12 +83,13 @@ export function SessionPage() {
     enabled: uploadPatientId !== null,
   });
 
+  const isArchivedUpload = Boolean(uploadQuery.data?.archived_at && uploadQuery.data?.archive_id);
   const isUploadReady = Number.isFinite(parsedUploadId) && uploadQuery.data?.status === "completed";
 
   const periodsQuery = useQuery({
     queryKey: ["periods", parsedUploadId],
     queryFn: () => getPeriods(parsedUploadId),
-    enabled: isUploadReady,
+    enabled: isUploadReady && !isArchivedUpload,
   });
 
   useEffect(() => {
@@ -91,7 +103,7 @@ export function SessionPage() {
   const segmentsQuery = useQuery({
     queryKey: ["segments", selectedPeriodId],
     queryFn: () => getSegments(selectedPeriodId as number),
-    enabled: isUploadReady && selectedPeriodId !== null,
+    enabled: isUploadReady && selectedPeriodId !== null && !isArchivedUpload,
   });
 
   useEffect(() => {
@@ -105,7 +117,7 @@ export function SessionPage() {
   const channelsQuery = useQuery({
     queryKey: ["channels", selectedSegmentId],
     queryFn: () => getChannels(selectedSegmentId as number, "trend"),
-    enabled: isUploadReady && selectedSegmentId !== null,
+    enabled: isUploadReady && selectedSegmentId !== null && !isArchivedUpload,
   });
 
   useEffect(() => {
@@ -159,7 +171,7 @@ export function SessionPage() {
     return [effectiveStart.toISOString(), segmentEnd.toISOString()] as [string, string];
   }, [selectedSegment, windowMinutes]);
 
-  const chartQuery = useChartData(isUploadReady ? selectedSegmentId : null, {
+  const chartQuery = useChartData(isUploadReady && !isArchivedUpload ? selectedSegmentId : null, {
     channels: selectedChannelIds,
     fromTs,
     toTs,
@@ -167,16 +179,10 @@ export function SessionPage() {
     sourceType: "trend",
   });
 
-  const alarmsQuery = useQuery({
-    queryKey: ["alarms", parsedUploadId, selectedSegmentId, fromTs, toTs],
-    queryFn: () => getAlarms(parsedUploadId, buildSegmentWindowQuery(selectedSegmentId, fromTs, toTs)),
-    enabled: isUploadReady && selectedSegmentId !== null && fromTs !== undefined && toTs !== undefined,
-  });
-
   const nibpQuery = useQuery({
     queryKey: ["nibp", parsedUploadId, selectedSegmentId, fromTs, toTs],
     queryFn: () => getNibpEvents(parsedUploadId, buildSegmentWindowQuery(selectedSegmentId, fromTs, toTs)),
-    enabled: isUploadReady && selectedSegmentId !== null && fromTs !== undefined && toTs !== undefined,
+    enabled: isUploadReady && selectedSegmentId !== null && fromTs !== undefined && toTs !== undefined && !isArchivedUpload,
   });
 
   const chartSeriesLabelByChannel = useMemo(() => {
@@ -251,6 +257,14 @@ export function SessionPage() {
     return null;
   }, [parsedNibpReadings]);
 
+  async function handleDownloadArchive() {
+    if (!uploadQuery.data?.archive_id) {
+      return;
+    }
+    const result = await downloadArchive(uploadQuery.data.archive_id);
+    downloadBlob(result.blob, result.filename ?? uploadQuery.data.archive_id);
+  }
+
   if (uploadQuery.isLoading) {
     return <div className="card">Loading upload status...</div>;
   }
@@ -274,6 +288,38 @@ export function SessionPage() {
         <h1>{sessionTitle}</h1>
         <div className="card error">
           Parsing failed: {uploadQuery.data.error_message ?? "Unknown parsing error."}
+        </div>
+      </div>
+    );
+  }
+
+  if (isArchivedUpload) {
+    return (
+      <div className="stack-md">
+        {patientQuery.data && (
+          <Breadcrumb
+            items={[
+              { label: "Patients", to: "/patients" },
+              { label: `${patientQuery.data.name} (${patientQuery.data.species})` },
+              { label: `Session #${parsedUploadId} Data Review` },
+            ]}
+          />
+        )}
+        <h1>{sessionTitle}</h1>
+        <div className="card archived-notice stack-md">
+          <div className="row-between">
+            <div>
+              <h3>Archived upload data</h3>
+              <p className="helper-text">
+                This upload stays attached to the patient record, but its live chart rows were archived on{" "}
+                {uploadQuery.data.archived_at ? formatDateTime(uploadQuery.data.archived_at) : "a previous maintenance run"}.
+              </p>
+            </div>
+            <button type="button" className="button-muted" onClick={() => void handleDownloadArchive()}>
+              Download archive ZIP
+            </button>
+          </div>
+          <HelpTip {...helpTips.archivedReport} />
         </div>
       </div>
     );
@@ -375,7 +421,7 @@ export function SessionPage() {
       {selectedSegmentId !== null && (
         <div className="card row-between">
           <div>
-            <NibpOverlay count={nibpReadingCount} /> <AlarmMarkers count={alarmsQuery.data?.length ?? 0} />
+            <NibpOverlay count={nibpReadingCount} />
           </div>
           <CsvExportButton
             uploadId={parsedUploadId}
@@ -393,13 +439,10 @@ export function SessionPage() {
           <TrendChart
             groupedData={chartQuery.byChannel}
             nibpEvents={nibpQuery.data ?? []}
-            alarms={alarmsQuery.data ?? []}
             seriesLabelByChannel={chartSeriesLabelByChannel}
           />
         )}
       </div>
-
-      <AlarmTable alarms={alarmsQuery.data ?? []} />
     </div>
   );
 }

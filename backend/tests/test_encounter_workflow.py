@@ -7,9 +7,23 @@ from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.models import Channel, Encounter, Measurement, Patient, RecordingPeriod, Segment, SourceType, Upload, UploadStatus
+from app.models import (
+    Channel,
+    Encounter,
+    Measurement,
+    NibpEvent,
+    Patient,
+    RecordingPeriod,
+    Segment,
+    SourceType,
+    Upload,
+    UploadNibpEventLink,
+    UploadStatus,
+)
 from app.database import Base
+from app.schemas import PaginatedNibpEventList
 from app.services.chart_service import list_encounter_measurements
+from app.services.chart_service import list_encounter_nibp_events_page
 from app.services.encounter_service import (
     create_or_replace_encounter,
     delete_encounter,
@@ -49,13 +63,10 @@ def _new_upload(patient_id: int, *, completed_at: datetime | None = None) -> Upl
         progress_total=1,
         trend_frames=2,
         nibp_frames=1,
-        alarm_frames=1,
         trend_sha256=checksum,
         trend_index_sha256=checksum,
         nibp_sha256=checksum,
         nibp_index_sha256=checksum,
-        alarm_sha256=checksum,
-        alarm_index_sha256=checksum,
         combined_hash=checksum,
         detected_local_dates=["2026-03-05"],
         completed_at=completed_at,
@@ -269,6 +280,83 @@ def test_encounter_measurements_are_scoped_to_saved_day_window() -> None:
         )
 
         assert [row[0].value for row in rows] == [80.0]
+
+
+def test_encounter_nibp_page_allows_deduplicated_events_without_upload_or_segment_ids() -> None:
+    with _make_session() as db:
+        patient = _new_patient(db, "nibp-page")
+        upload = _new_upload(patient.id)
+        db.add(upload)
+        db.flush()
+
+        period = RecordingPeriod(
+            upload_id=upload.id,
+            period_index=0,
+            start_time=datetime(2026, 3, 5, 0, 0, 0),
+            end_time=datetime(2026, 3, 5, 1, 0, 0),
+            frame_count=1,
+            label="Period 1",
+        )
+        db.add(period)
+        db.flush()
+
+        segment = Segment(
+            period_id=period.id,
+            upload_id=upload.id,
+            segment_index=0,
+            start_time=period.start_time,
+            end_time=period.end_time,
+            frame_count=1,
+            duration_seconds=3600,
+        )
+        db.add(segment)
+        db.flush()
+
+        event = NibpEvent(
+            upload_id=None,
+            segment_id=None,
+            timestamp=datetime(2026, 3, 5, 0, 30, 0),
+            channel_values={"bp_systolic_inferred": 120, "bp_diastolic_inferred": 80},
+            has_measurement=True,
+        )
+        db.add(event)
+        db.flush()
+
+        db.add(
+            UploadNibpEventLink(
+                upload_id=upload.id,
+                segment_id=segment.id,
+                nibp_event_id=event.id,
+                timestamp=event.timestamp,
+            )
+        )
+        db.commit()
+
+        encounter = create_or_replace_encounter(
+            db,
+            upload=upload,
+            patient=patient,
+            encounter_date_local=date(2026, 3, 5),
+            timezone_name="UTC",
+            label=None,
+            notes=None,
+        )
+
+        result = list_encounter_nibp_events_page(
+            db,
+            encounter_id=encounter.id,
+            measurements_only=True,
+            limit=50,
+            offset=0,
+        )
+
+        payload = PaginatedNibpEventList.model_validate(
+            {"items": result.items, "total": result.total, "limit": 50, "offset": 0}
+        )
+
+        assert payload.total == 1
+        assert payload.items[0].upload_id is None
+        assert payload.items[0].segment_id is None
 
 
 def test_delete_encounter_clears_patient_preferred_encounter() -> None:

@@ -1,0 +1,845 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.12, pytest-9.0.2, pluggy-1.6.0 -- C:\Users\Alson\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\Alson\Desktop\melevet\data\record\backend
+configfile: pytest.ini
+plugins: anyio-4.12.1, Faker-40.4.0, langsmith-0.6.9, asyncio-1.3.0, cov-7.0.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 100 items
+
+tests/test_channel_mapping_backfill.py::test_resolve_channel_metadata_prefers_index_over_legacy_offset PASSED [  1%]
+tests/test_channel_mapping_backfill.py::test_resolve_channel_metadata_accepts_legacy_offset_alias PASSED [  2%]
+tests/test_channel_mapping_backfill.py::test_resolve_channel_metadata_does_not_use_implicit_numeric_offset_alias PASSED [  3%]
+tests/test_channel_mapping_backfill.py::test_backfill_channel_metadata_updates_existing_rows PASSED [  4%]
+tests/test_database_maintenance.py::test_sqlite_upload_maintenance_backfills_combined_hash_and_index PASSED [  5%]
+tests/test_database_maintenance.py::test_sqlite_core_storage_compaction_prunes_rows_and_rebuilds_schema PASSED [  6%]
+tests/test_database_maintenance.py::test_sqlite_upload_dedup_schema_backfills_canonical_rows_and_links PASSED [  7%]
+tests/test_decode_export.py::test_decode_export_rejects_empty_request PASSED [  8%]
+tests/test_decode_export.py::test_decode_export_rejects_partial_pair FAILED [  9%]
+tests/test_decode_export.py::test_decode_export_returns_expected_zip_for_single_pair FAILED [ 10%]
+tests/test_decode_export.py::test_decode_export_returns_expected_zip_for_all_pairs FAILED [ 11%]
+tests/test_decode_export.py::test_decode_job_reports_progress_and_supports_download FAILED [ 12%]
+tests/test_decode_export.py::test_decode_job_download_returns_conflict_while_processing PASSED [ 13%]
+tests/test_decode_export.py::test_decode_job_download_returns_conflict_when_failed PASSED [ 14%]
+tests/test_decode_export.py::test_decode_job_download_returns_gone_when_archive_expires FAILED [ 15%]
+tests/test_decode_export.py::test_build_decode_export_archive_does_not_mutate_database_rows FAILED [ 16%]
+tests/test_encounter_workflow.py::test_detected_local_dates_expand_in_local_timezone PASSED [ 17%]
+tests/test_encounter_workflow.py::test_resolve_timezone_accepts_iana_name PASSED [ 18%]
+tests/test_encounter_workflow.py::test_create_or_replace_encounter_repoints_existing_date_and_removes_orphan_upload PASSED [ 19%]
+tests/test_encounter_workflow.py::test_delete_encounter_removes_last_orphan_snapshot PASSED [ 20%]
+tests/test_encounter_workflow.py::test_purge_stale_orphan_uploads_keeps_referenced_snapshots_and_deletes_old_orphans PASSED [ 21%]
+tests/test_encounter_workflow.py::test_uploads_enforce_global_combined_hash_uniqueness PASSED [ 22%]
+tests/test_encounter_workflow.py::test_encounter_measurements_are_scoped_to_saved_day_window PASSED [ 23%]
+tests/test_encounter_workflow.py::test_delete_encounter_clears_patient_preferred_encounter PASSED [ 24%]
+tests/test_encounter_workflow.py::test_update_encounter_rejects_date_not_in_upload_detected_dates PASSED [ 25%]
+tests/test_encounter_workflow.py::test_update_encounter_allows_switching_to_another_detected_date PASSED [ 26%]
+tests/test_index_parser.py::test_index_layout_formula FAILED             [ 27%]
+tests/test_index_parser.py::test_timestamp_decode_formula PASSED         [ 28%]
+tests/test_index_parser.py::test_non_monotonic_index_raises_in_strict_mode PASSED [ 29%]
+tests/test_index_parser.py::test_non_monotonic_index_allowed_in_tolerant_mode PASSED [ 30%]
+tests/test_parsers.py::test_sample_frame_counts FAILED                   [ 31%]
+tests/test_parsers.py::test_trend_first_timestamp FAILED                 [ 32%]
+tests/test_parsers.py::test_trend_frame_timestamp_comes_from_data_frame FAILED [ 33%]
+tests/test_parsers.py::test_trend_parser_converts_invalid_sentinels_to_none FAILED [ 34%]
+tests/test_parsers.py::test_trend_parser_accepts_missing_index FAILED    [ 35%]
+tests/test_parsers.py::test_segmenter_sample_boundaries FAILED           [ 36%]
+tests/test_parsers.py::test_segmenter_starts_new_period_on_timestamp_rollback PASSED [ 37%]
+tests/test_parsers.py::test_nibp_parser_adds_inferred_bp_fields FAILED   [ 38%]
+tests/test_patient_delete.py::test_delete_patient_route_removes_related_data_and_keeps_other_patient PASSED [ 39%]
+tests/test_patient_delete.py::test_delete_patient_route_succeeds_without_related_records PASSED [ 40%]
+tests/test_patient_delete.py::test_delete_patient_route_returns_not_found_after_repeated_delete PASSED [ 41%]
+tests/test_patient_delete.py::test_delete_patient_hard_regression_avoids_circular_dependency_cycle PASSED [ 42%]
+tests/test_patient_upload_history.py::test_list_patient_uploads_includes_latest_recorded_at PASSED [ 43%]
+tests/test_patient_upload_history.py::test_list_patient_uploads_returns_null_latest_recorded_at_without_periods PASSED [ 44%]
+tests/test_patients_list.py::test_list_patients_uses_preferred_report_date_without_changing_latest_report_date PASSED [ 45%]
+tests/test_patients_list.py::test_list_patients_returns_null_report_dates_when_patient_has_no_encounters PASSED [ 46%]
+tests/test_patients_list.py::test_update_patient_allows_updating_patient_id_code PASSED [ 47%]
+tests/test_patients_list.py::test_update_patient_rejects_duplicate_patient_id_code PASSED [ 48%]
+tests/test_patients_list.py::test_update_patient_rejects_preferred_encounter_for_another_patient PASSED [ 49%]
+tests/test_patients_list.py::test_available_report_dates_include_detected_dates_without_saved_encounters PASSED [ 50%]
+tests/test_patients_list.py::test_create_upload_encounter_rejects_snapshot_from_another_patient PASSED [ 51%]
+tests/test_security_controls.py::test_protected_patient_routes_require_login_and_csrf PASSED [ 52%]
+tests/test_security_controls.py::test_auth_session_returns_401_without_session PASSED [ 53%]
+tests/test_security_controls.py::test_protected_routes_return_401_without_session[router0-/api/patients] PASSED [ 54%]
+tests/test_security_controls.py::test_protected_routes_return_401_without_session[router1-/api/uploads/123] PASSED [ 55%]
+tests/test_security_controls.py::test_protected_routes_return_401_without_session[router2-/api/staged-uploads/demo-stage] PASSED [ 56%]
+tests/test_security_controls.py::test_protected_routes_return_401_without_session[router3-/api/encounters/123] PASSED [ 57%]
+tests/test_security_controls.py::test_protected_routes_return_401_without_session[router4-/api/decode/jobs/demo-job] PASSED [ 58%]
+tests/test_security_controls.py::test_staged_upload_rejects_path_traversal_filename[..\\..\\evil.data] PASSED [ 59%]
+tests/test_security_controls.py::test_staged_upload_rejects_path_traversal_filename[../evil.data] PASSED [ 60%]
+tests/test_security_controls.py::test_direct_upload_rejects_oversized_file PASSED [ 61%]
+tests/test_security_controls.py::test_production_settings_require_secure_explicit_cors_and_disable_docs PASSED [ 62%]
+tests/test_security_controls.py::test_local_app_settings_use_appdata_and_allow_empty_cors PASSED [ 63%]
+tests/test_security_controls.py::test_bootstrap_user_is_created_when_credentials_are_configured PASSED [ 64%]
+tests/test_security_controls.py::test_bootstrap_user_raises_clear_error_when_credentials_missing PASSED [ 65%]
+tests/test_security_controls.py::test_default_database_url_points_to_backend_sqlite_file PASSED [ 66%]
+tests/test_staged_uploads.py::test_main_module_imports_with_staged_router_present PASSED [ 67%]
+tests/test_staged_uploads.py::test_staged_upload_parses_without_writing_sqlite PASSED [ 68%]
+tests/test_staged_uploads.py::test_staged_upload_delete_and_expiry_remove_files PASSED [ 69%]
+tests/test_staged_uploads.py::test_save_staged_upload_persists_only_selected_day_slice PASSED [ 70%]
+tests/test_staged_uploads.py::test_saving_identical_selected_day_slice_reuses_saved_upload PASSED [ 71%]
+tests/test_staged_uploads.py::test_trim_uploads_to_saved_encounter_windows_prunes_old_history PASSED [ 72%]
+tests/test_staged_uploads.py::test_staged_upload_api_create_returns_stage_id_and_processing_state PASSED [ 73%]
+tests/test_staged_uploads.py::test_staged_upload_api_get_returns_completed_discovery PASSED [ 74%]
+tests/test_staged_uploads.py::test_staged_upload_api_delete_removes_stage PASSED [ 75%]
+tests/test_staged_uploads.py::test_staged_upload_api_save_encounter_persists_selected_day_slice PASSED [ 76%]
+tests/test_staged_uploads.py::test_staged_upload_api_rejects_invalid_file_pair PASSED [ 77%]
+tests/test_staged_uploads.py::test_staged_upload_api_rejects_missing_patient PASSED [ 78%]
+tests/test_staged_uploads.py::test_staged_upload_api_rejects_invalid_selected_day PASSED [ 79%]
+tests/test_staged_uploads.py::test_staged_upload_api_returns_404_for_expired_stage PASSED [ 80%]
+tests/test_upload_pair_validation.py::test_required_pair_accepts_complete PASSED [ 81%]
+tests/test_upload_pair_validation.py::test_required_pair_rejects_missing_one_or_both PASSED [ 82%]
+tests/test_upload_pair_validation.py::test_optional_pair_accepts_none_or_complete PASSED [ 83%]
+tests/test_upload_pair_validation.py::test_optional_pair_rejects_incomplete[True-False] PASSED [ 84%]
+tests/test_upload_pair_validation.py::test_optional_pair_rejects_incomplete[False-True] PASSED [ 85%]
+tests/test_upload_service.py::test_resolve_segment_uses_chronological_bounds_when_windows_unsorted PASSED [ 86%]
+tests/test_upload_status_tracking.py::test_create_upload_stub_initializes_progress_fields PASSED [ 87%]
+tests/test_upload_status_tracking.py::test_process_upload_marks_completed_with_final_progress PASSED [ 88%]
+tests/test_upload_status_tracking.py::test_stale_processing_upload_is_marked_error PASSED [ 89%]
+tests/test_upload_status_tracking.py::test_find_reusable_upload_is_global_by_hash PASSED [ 90%]
+tests/test_upload_status_tracking.py::test_create_upload_stub_raises_for_exact_duplicate_hash PASSED [ 91%]
+tests/test_upload_status_tracking.py::test_partial_overlap_upload_reuses_existing_measurements_and_keeps_full_view PASSED [ 92%]
+tests/test_utc_time_handling.py::test_datetime_serializes_with_explicit_utc_suffix PASSED [ 93%]
+tests/test_utc_time_handling.py::test_measurement_window_filter_is_timezone_stable PASSED [ 94%]
+tests/test_utc_time_handling.py::test_upload_measurements_include_multiple_segments_and_timezone_stable PASSED [ 95%]
+tests/test_utc_time_handling.py::test_alarm_and_nibp_range_filters_apply_at_upload_scope PASSED [ 96%]
+tests/test_utc_time_handling.py::test_upload_channel_listing_supports_source_filters PASSED [ 97%]
+tests/test_utc_time_handling.py::test_alarm_and_nibp_filters_apply_with_segment_and_time_window PASSED [ 98%]
+tests/test_utc_time_handling.py::test_upload_measurement_downsampling_caps_points_per_channel PASSED [ 99%]
+tests/test_utc_time_handling.py::test_query_upload_measurements_reports_matched_and_returned_row_counts PASSED [100%]
+
+================================== FAILURES ===================================
+___________________ test_decode_export_rejects_partial_pair ___________________
+
+data_dir = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record')
+
+    def test_decode_export_rejects_partial_pair(data_dir) -> None:
+        response = client.post(
+            "/api/decode/export",
+            data={"timezone": "UTC"},
+            files={
+>               "trend_data": ("TrendChartRecord.data", _file_bytes(data_dir, "Records/TrendChartRecord.data"), "application/octet-stream"),
+                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            },
+        )
+
+tests\test_decode_export.py:202: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+data_dir = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record')
+relative_path = 'Records/TrendChartRecord.data'
+
+    def _file_bytes(data_dir, relative_path: str) -> bytes:
+>       return (data_dir / relative_path).read_bytes()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_decode_export.py:53: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/Records/TrendChartRecord.data')
+
+    def read_bytes(self):
+        """
+        Open the file in bytes mode, read it, and close the file.
+        """
+>       with self.open(mode='rb') as f:
+             ^^^^^^^^^^^^^^^^^^^^
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_abc.py:625: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/Records/TrendChartRecord.data')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\Alson\\Desktop\\melevet\\data\\record\\Records\\TrendChartRecord.data'
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_local.py:537: FileNotFoundError
+___________ test_decode_export_returns_expected_zip_for_single_pair ___________
+
+data_dir = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record')
+
+    def test_decode_export_returns_expected_zip_for_single_pair(data_dir) -> None:
+        response = client.post(
+            "/api/decode/export",
+            data={"timezone": "Asia/Singapore"},
+            files={
+>               "trend_data": ("TrendChartRecord.data", _file_bytes(data_dir, "Records/TrendChartRecord.data"), "application/octet-stream"),
+                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                "trend_index": ("TrendChartRecord.Index", _file_bytes(data_dir, "Records/TrendChartRecord.Index"), "application/octet-stream"),
+            },
+        )
+
+tests\test_decode_export.py:215: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+data_dir = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record')
+relative_path = 'Records/TrendChartRecord.data'
+
+    def _file_bytes(data_dir, relative_path: str) -> bytes:
+>       return (data_dir / relative_path).read_bytes()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_decode_export.py:53: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/Records/TrendChartRecord.data')
+
+    def read_bytes(self):
+        """
+        Open the file in bytes mode, read it, and close the file.
+        """
+>       with self.open(mode='rb') as f:
+             ^^^^^^^^^^^^^^^^^^^^
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_abc.py:625: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/Records/TrendChartRecord.data')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\Alson\\Desktop\\melevet\\data\\record\\Records\\TrendChartRecord.data'
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_local.py:537: FileNotFoundError
+____________ test_decode_export_returns_expected_zip_for_all_pairs ____________
+
+data_dir = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record')
+
+    def test_decode_export_returns_expected_zip_for_all_pairs(data_dir) -> None:
+        response = client.post(
+            "/api/decode/export",
+            data={"timezone": "Asia/Singapore"},
+            files={
+>               "trend_data": ("TrendChartRecord.data", _file_bytes(data_dir, "Records/TrendChartRecord.data"), "application/octet-stream"),
+                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                "trend_index": ("TrendChartRecord.Index", _file_bytes(data_dir, "Records/TrendChartRecord.Index"), "application/octet-stream"),
+                "nibp_data": ("NibpRecord.data", _file_bytes(data_dir, "Records/NibpRecord.data"), "application/octet-stream"),
+                "nibp_index": ("NibpRecord.Index", _file_bytes(data_dir, "Records/NibpRecord.Index"), "application/octet-stream"),
+                "alarm_data": ("AlarmRecord.data", _file_bytes(data_dir, "Records/AlarmRecord.data"), "application/octet-stream"),
+                "alarm_index": ("AlarmRecord.Index", _file_bytes(data_dir, "Records/AlarmRecord.Index"), "application/octet-stream"),
+            },
+        )
+
+tests\test_decode_export.py:231: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+data_dir = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record')
+relative_path = 'Records/TrendChartRecord.data'
+
+    def _file_bytes(data_dir, relative_path: str) -> bytes:
+>       return (data_dir / relative_path).read_bytes()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_decode_export.py:53: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/Records/TrendChartRecord.data')
+
+    def read_bytes(self):
+        """
+        Open the file in bytes mode, read it, and close the file.
+        """
+>       with self.open(mode='rb') as f:
+             ^^^^^^^^^^^^^^^^^^^^
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_abc.py:625: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/Records/TrendChartRecord.data')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\Alson\\Desktop\\melevet\\data\\record\\Records\\TrendChartRecord.data'
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_local.py:537: FileNotFoundError
+___________ test_decode_job_reports_progress_and_supports_download ____________
+
+data_dir = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record')
+
+    def test_decode_job_reports_progress_and_supports_download(data_dir) -> None:
+        response = client.post(
+            "/api/decode/jobs",
+            data={"timezone": "Asia/Singapore"},
+            files={
+>               "trend_data": ("TrendChartRecord.data", _file_bytes(data_dir, "Records/TrendChartRecord.data"), "application/octet-stream"),
+                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                "trend_index": ("TrendChartRecord.Index", _file_bytes(data_dir, "Records/TrendChartRecord.Index"), "application/octet-stream"),
+            },
+        )
+
+tests\test_decode_export.py:249: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+data_dir = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record')
+relative_path = 'Records/TrendChartRecord.data'
+
+    def _file_bytes(data_dir, relative_path: str) -> bytes:
+>       return (data_dir / relative_path).read_bytes()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_decode_export.py:53: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/Records/TrendChartRecord.data')
+
+    def read_bytes(self):
+        """
+        Open the file in bytes mode, read it, and close the file.
+        """
+>       with self.open(mode='rb') as f:
+             ^^^^^^^^^^^^^^^^^^^^
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_abc.py:625: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/Records/TrendChartRecord.data')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\Alson\\Desktop\\melevet\\data\\record\\Records\\TrendChartRecord.data'
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_local.py:537: FileNotFoundError
+_________ test_decode_job_download_returns_gone_when_archive_expires __________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000232DC36FDF0>
+
+    def test_decode_job_download_returns_gone_when_archive_expires(monkeypatch: pytest.MonkeyPatch) -> None:
+        job = decode_job_service.create_decode_job(selected_families=["Trend Chart"])
+        decode_job_service.update_decode_job(
+            job.id,
+            status="completed",
+            progress_percent=100,
+            phase="Ready to download",
+            detail="Decoded workbooks are ready",
+            archive_bytes=b"archive",
+        )
+    
+        expired_now = job.updated_at + decode_job_service.JOB_RETENTION + timedelta(seconds=1)
+>       monkeypatch.setattr(decode_job_service, "_utcnow", lambda: expired_now)
+E       AttributeError: <module 'app.services.decode_job_service' from 'C:\\Users\\Alson\\Desktop\\melevet\\data\\record\\backend\\app\\services\\decode_job_service.py'> has no attribute '_utcnow'
+
+tests\test_decode_export.py:313: AttributeError
+_______ test_build_decode_export_archive_does_not_mutate_database_rows ________
+
+data_dir = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record')
+
+    def test_build_decode_export_archive_does_not_mutate_database_rows(data_dir) -> None:
+        with _build_session() as db:
+            _seed_decode_irrelevant_rows(db)
+            counts_before = _table_counts(db)
+    
+            archive = build_decode_export_archive(
+>               trend_data=_file_bytes(data_dir, "Records/TrendChartRecord.data"),
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                trend_index=_file_bytes(data_dir, "Records/TrendChartRecord.Index"),
+                nibp_data=_file_bytes(data_dir, "Records/NibpRecord.data"),
+                nibp_index=_file_bytes(data_dir, "Records/NibpRecord.Index"),
+                alarm_data=_file_bytes(data_dir, "Records/AlarmRecord.data"),
+                alarm_index=_file_bytes(data_dir, "Records/AlarmRecord.Index"),
+                timezone_name="Asia/Singapore",
+            )
+
+tests\test_decode_export.py:327: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+data_dir = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record')
+relative_path = 'Records/TrendChartRecord.data'
+
+    def _file_bytes(data_dir, relative_path: str) -> bytes:
+>       return (data_dir / relative_path).read_bytes()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_decode_export.py:53: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/Records/TrendChartRecord.data')
+
+    def read_bytes(self):
+        """
+        Open the file in bytes mode, read it, and close the file.
+        """
+>       with self.open(mode='rb') as f:
+             ^^^^^^^^^^^^^^^^^^^^
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_abc.py:625: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/Records/TrendChartRecord.data')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\Alson\\Desktop\\melevet\\data\\record\\Records\\TrendChartRecord.data'
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_local.py:537: FileNotFoundError
+__________________________ test_index_layout_formula __________________________
+
+data_dir = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record')
+
+    def test_index_layout_formula(data_dir):
+        index_path = data_dir / "TrendChartRecord.Index"
+        data_path = data_dir / "TrendChartRecord.data"
+        if not index_path.exists():
+            index_path = data_dir / "Records" / "TrendChartRecord.Index"
+        if not data_path.exists():
+            data_path = data_dir / "Records" / "TrendChartRecord.data"
+    
+>       index_bytes = index_path.read_bytes()
+                      ^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_index_parser.py:48: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/Records/TrendChartRecord.Index')
+
+    def read_bytes(self):
+        """
+        Open the file in bytes mode, read it, and close the file.
+        """
+>       with self.open(mode='rb') as f:
+             ^^^^^^^^^^^^^^^^^^^^
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_abc.py:625: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/Records/TrendChartRecord.Index')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\Alson\\Desktop\\melevet\\data\\record\\Records\\TrendChartRecord.Index'
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_local.py:537: FileNotFoundError
+__________________________ test_sample_frame_counts ___________________________
+
+data_dir = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record')
+
+    def test_sample_frame_counts(data_dir):
+>       trend_data = _read(data_dir / "TrendChartRecord.data")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_parsers.py:20: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/TrendChartRecord.data')
+
+    def _read(path):
+        if not path.exists():
+            records_path = path.parent / "Records" / path.name
+            if records_path.exists():
+                path = records_path
+>       return path.read_bytes()
+               ^^^^^^^^^^^^^^^^^
+
+tests\test_parsers.py:16: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/TrendChartRecord.data')
+
+    def read_bytes(self):
+        """
+        Open the file in bytes mode, read it, and close the file.
+        """
+>       with self.open(mode='rb') as f:
+             ^^^^^^^^^^^^^^^^^^^^
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_abc.py:625: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/TrendChartRecord.data')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\Alson\\Desktop\\melevet\\data\\record\\TrendChartRecord.data'
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_local.py:537: FileNotFoundError
+_________________________ test_trend_first_timestamp __________________________
+
+data_dir = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record')
+
+    def test_trend_first_timestamp(data_dir):
+>       trend_index = _read(data_dir / "TrendChartRecord.Index")
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_parsers.py:30: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/TrendChartRecord.Index')
+
+    def _read(path):
+        if not path.exists():
+            records_path = path.parent / "Records" / path.name
+            if records_path.exists():
+                path = records_path
+>       return path.read_bytes()
+               ^^^^^^^^^^^^^^^^^
+
+tests\test_parsers.py:16: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/TrendChartRecord.Index')
+
+    def read_bytes(self):
+        """
+        Open the file in bytes mode, read it, and close the file.
+        """
+>       with self.open(mode='rb') as f:
+             ^^^^^^^^^^^^^^^^^^^^
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_abc.py:625: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/TrendChartRecord.Index')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\Alson\\Desktop\\melevet\\data\\record\\TrendChartRecord.Index'
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_local.py:537: FileNotFoundError
+______________ test_trend_frame_timestamp_comes_from_data_frame _______________
+
+data_dir = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record')
+
+    def test_trend_frame_timestamp_comes_from_data_frame(data_dir):
+>       trend_index = bytearray(_read(data_dir / "TrendChartRecord.Index"))
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_parsers.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/TrendChartRecord.Index')
+
+    def _read(path):
+        if not path.exists():
+            records_path = path.parent / "Records" / path.name
+            if records_path.exists():
+                path = records_path
+>       return path.read_bytes()
+               ^^^^^^^^^^^^^^^^^
+
+tests\test_parsers.py:16: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/TrendChartRecord.Index')
+
+    def read_bytes(self):
+        """
+        Open the file in bytes mode, read it, and close the file.
+        """
+>       with self.open(mode='rb') as f:
+             ^^^^^^^^^^^^^^^^^^^^
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_abc.py:625: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/TrendChartRecord.Index')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\Alson\\Desktop\\melevet\\data\\record\\TrendChartRecord.Index'
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_local.py:537: FileNotFoundError
+____________ test_trend_parser_converts_invalid_sentinels_to_none _____________
+
+data_dir = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record')
+
+    def test_trend_parser_converts_invalid_sentinels_to_none(data_dir):
+>       trend_index = _read(data_dir / "TrendChartRecord.Index")
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_parsers.py:56: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/TrendChartRecord.Index')
+
+    def _read(path):
+        if not path.exists():
+            records_path = path.parent / "Records" / path.name
+            if records_path.exists():
+                path = records_path
+>       return path.read_bytes()
+               ^^^^^^^^^^^^^^^^^
+
+tests\test_parsers.py:16: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/TrendChartRecord.Index')
+
+    def read_bytes(self):
+        """
+        Open the file in bytes mode, read it, and close the file.
+        """
+>       with self.open(mode='rb') as f:
+             ^^^^^^^^^^^^^^^^^^^^
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_abc.py:625: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/TrendChartRecord.Index')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\Alson\\Desktop\\melevet\\data\\record\\TrendChartRecord.Index'
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_local.py:537: FileNotFoundError
+___________________ test_trend_parser_accepts_missing_index ___________________
+
+data_dir = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record')
+
+    def test_trend_parser_accepts_missing_index(data_dir):
+>       trend_data = _read(data_dir / "TrendChartRecord.data")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_parsers.py:68: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/TrendChartRecord.data')
+
+    def _read(path):
+        if not path.exists():
+            records_path = path.parent / "Records" / path.name
+            if records_path.exists():
+                path = records_path
+>       return path.read_bytes()
+               ^^^^^^^^^^^^^^^^^
+
+tests\test_parsers.py:16: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/TrendChartRecord.data')
+
+    def read_bytes(self):
+        """
+        Open the file in bytes mode, read it, and close the file.
+        """
+>       with self.open(mode='rb') as f:
+             ^^^^^^^^^^^^^^^^^^^^
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_abc.py:625: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/TrendChartRecord.data')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\Alson\\Desktop\\melevet\\data\\record\\TrendChartRecord.data'
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_local.py:537: FileNotFoundError
+______________________ test_segmenter_sample_boundaries _______________________
+
+data_dir = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record')
+
+    def test_segmenter_sample_boundaries(data_dir):
+>       trend_index = _read(data_dir / "TrendChartRecord.Index")
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_parsers.py:80: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/TrendChartRecord.Index')
+
+    def _read(path):
+        if not path.exists():
+            records_path = path.parent / "Records" / path.name
+            if records_path.exists():
+                path = records_path
+>       return path.read_bytes()
+               ^^^^^^^^^^^^^^^^^
+
+tests\test_parsers.py:16: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/TrendChartRecord.Index')
+
+    def read_bytes(self):
+        """
+        Open the file in bytes mode, read it, and close the file.
+        """
+>       with self.open(mode='rb') as f:
+             ^^^^^^^^^^^^^^^^^^^^
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_abc.py:625: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/TrendChartRecord.Index')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\Alson\\Desktop\\melevet\\data\\record\\TrendChartRecord.Index'
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_local.py:537: FileNotFoundError
+__________________ test_nibp_parser_adds_inferred_bp_fields ___________________
+
+data_dir = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record')
+
+    def test_nibp_parser_adds_inferred_bp_fields(data_dir):
+>       nibp_index = _read(data_dir / "NibpRecord.Index")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_parsers.py:122: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/NibpRecord.Index')
+
+    def _read(path):
+        if not path.exists():
+            records_path = path.parent / "Records" / path.name
+            if records_path.exists():
+                path = records_path
+>       return path.read_bytes()
+               ^^^^^^^^^^^^^^^^^
+
+tests\test_parsers.py:16: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/NibpRecord.Index')
+
+    def read_bytes(self):
+        """
+        Open the file in bytes mode, read it, and close the file.
+        """
+>       with self.open(mode='rb') as f:
+             ^^^^^^^^^^^^^^^^^^^^
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_abc.py:625: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/Alson/Desktop/melevet/data/record/NibpRecord.Index')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\Alson\\Desktop\\melevet\\data\\record\\NibpRecord.Index'
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3312.0_x64__qbz5n2kfra8p0\Lib\pathlib\_local.py:537: FileNotFoundError
+=========================== short test summary info ===========================
+FAILED tests/test_decode_export.py::test_decode_export_rejects_partial_pair
+FAILED tests/test_decode_export.py::test_decode_export_returns_expected_zip_for_single_pair
+FAILED tests/test_decode_export.py::test_decode_export_returns_expected_zip_for_all_pairs
+FAILED tests/test_decode_export.py::test_decode_job_reports_progress_and_supports_download
+FAILED tests/test_decode_export.py::test_decode_job_download_returns_gone_when_archive_expires
+FAILED tests/test_decode_export.py::test_build_decode_export_archive_does_not_mutate_database_rows
+FAILED tests/test_index_parser.py::test_index_layout_formula - FileNotFoundEr...
+FAILED tests/test_parsers.py::test_sample_frame_counts - FileNotFoundError: [...
+FAILED tests/test_parsers.py::test_trend_first_timestamp - FileNotFoundError:...
+FAILED tests/test_parsers.py::test_trend_frame_timestamp_comes_from_data_frame
+FAILED tests/test_parsers.py::test_trend_parser_converts_invalid_sentinels_to_none
+FAILED tests/test_parsers.py::test_trend_parser_accepts_missing_index - FileN...
+FAILED tests/test_parsers.py::test_segmenter_sample_boundaries - FileNotFound...
+FAILED tests/test_parsers.py::test_nibp_parser_adds_inferred_bp_fields - File...
+======================== 14 failed, 86 passed in 6.08s ========================

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, RefObject, useEffect, useRef, useState } from "react";
 import axios from "axios";
 
 import { DecodeJob, createDecodeJob, downloadDecodeJob, getDecodeJob } from "../api/endpoints";
@@ -8,8 +8,6 @@ interface DecodeFiles {
   trendIndex: File | null;
   nibpData: File | null;
   nibpIndex: File | null;
-  alarmData: File | null;
-  alarmIndex: File | null;
 }
 
 const initialFiles: DecodeFiles = {
@@ -17,8 +15,6 @@ const initialFiles: DecodeFiles = {
   trendIndex: null,
   nibpData: null,
   nibpIndex: null,
-  alarmData: null,
-  alarmIndex: null,
 };
 
 function decodePairError(label: string, dataFile: File | null, indexFile: File | null): string | null {
@@ -67,10 +63,20 @@ export function DecodingPage() {
   const [activeJob, setActiveJob] = useState<DecodeJob | null>(null);
   const downloadedJobIdRef = useRef<string | null>(null);
 
+  const trendDataRef = useRef<HTMLInputElement>(null);
+  const trendIndexRef = useRef<HTMLInputElement>(null);
+  const nibpDataRef = useRef<HTMLInputElement>(null);
+  const nibpIndexRef = useRef<HTMLInputElement>(null);
+  const inputRefs: Record<keyof DecodeFiles, RefObject<HTMLInputElement | null>> = {
+    trendData: trendDataRef,
+    trendIndex: trendIndexRef,
+    nibpData: nibpDataRef,
+    nibpIndex: nibpIndexRef,
+  };
+
   const validationErrors = [
     decodePairError("Trend Chart", files.trendData, files.trendIndex),
     decodePairError("NIBP", files.nibpData, files.nibpIndex),
-    decodePairError("Alarm", files.alarmData, files.alarmIndex),
   ].filter((value): value is string => value !== null);
 
   let selectedPairCount = 0;
@@ -78,9 +84,6 @@ export function DecodingPage() {
     selectedPairCount += 1;
   }
   if (files.nibpData && files.nibpIndex) {
-    selectedPairCount += 1;
-  }
-  if (files.alarmData && files.alarmIndex) {
     selectedPairCount += 1;
   }
 
@@ -182,6 +185,14 @@ export function DecodingPage() {
     setFiles((current) => ({ ...current, [key]: file }));
   }
 
+  function clearFile(key: keyof DecodeFiles) {
+    const ref = inputRefs[key];
+    if (ref.current) {
+      ref.current.value = "";
+    }
+    setFile(key, null);
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (formError) {
@@ -205,10 +216,6 @@ export function DecodingPage() {
       if (files.nibpData && files.nibpIndex) {
         form.append("nibp_data", files.nibpData);
         form.append("nibp_index", files.nibpIndex);
-      }
-      if (files.alarmData && files.alarmIndex) {
-        form.append("alarm_data", files.alarmData);
-        form.append("alarm_index", files.alarmIndex);
       }
       form.append("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
 
@@ -240,11 +247,21 @@ export function DecodingPage() {
             <h3>Trend Chart</h3>
             <label>
               TrendChartRecord.data
-              <input type="file" onChange={(event) => setFile("trendData", event.target.files?.[0] ?? null)} disabled={isBusy} />
+              <div className="file-input-row">
+                <input ref={trendDataRef} type="file" onChange={(event) => setFile("trendData", event.target.files?.[0] ?? null)} disabled={isBusy} />
+                {files.trendData && (
+                  <button type="button" className="file-remove-btn" onClick={() => clearFile("trendData")} disabled={isBusy} aria-label="Remove TrendChartRecord.data">X</button>
+                )}
+              </div>
             </label>
             <label>
               TrendChartRecord.Index
-              <input type="file" onChange={(event) => setFile("trendIndex", event.target.files?.[0] ?? null)} disabled={isBusy} />
+              <div className="file-input-row">
+                <input ref={trendIndexRef} type="file" onChange={(event) => setFile("trendIndex", event.target.files?.[0] ?? null)} disabled={isBusy} />
+                {files.trendIndex && (
+                  <button type="button" className="file-remove-btn" onClick={() => clearFile("trendIndex")} disabled={isBusy} aria-label="Remove TrendChartRecord.Index">X</button>
+                )}
+              </div>
             </label>
           </div>
 
@@ -252,25 +269,24 @@ export function DecodingPage() {
             <h3>NIBP</h3>
             <label>
               NibpRecord.data
-              <input type="file" onChange={(event) => setFile("nibpData", event.target.files?.[0] ?? null)} disabled={isBusy} />
+              <div className="file-input-row">
+                <input ref={nibpDataRef} type="file" onChange={(event) => setFile("nibpData", event.target.files?.[0] ?? null)} disabled={isBusy} />
+                {files.nibpData && (
+                  <button type="button" className="file-remove-btn" onClick={() => clearFile("nibpData")} disabled={isBusy} aria-label="Remove NibpRecord.data">X</button>
+                )}
+              </div>
             </label>
             <label>
               NibpRecord.Index
-              <input type="file" onChange={(event) => setFile("nibpIndex", event.target.files?.[0] ?? null)} disabled={isBusy} />
+              <div className="file-input-row">
+                <input ref={nibpIndexRef} type="file" onChange={(event) => setFile("nibpIndex", event.target.files?.[0] ?? null)} disabled={isBusy} />
+                {files.nibpIndex && (
+                  <button type="button" className="file-remove-btn" onClick={() => clearFile("nibpIndex")} disabled={isBusy} aria-label="Remove NibpRecord.Index">X</button>
+                )}
+              </div>
             </label>
           </div>
 
-          <div className="decode-pair-card stack-md">
-            <h3>Alarm</h3>
-            <label>
-              AlarmRecord.data
-              <input type="file" onChange={(event) => setFile("alarmData", event.target.files?.[0] ?? null)} disabled={isBusy} />
-            </label>
-            <label>
-              AlarmRecord.Index
-              <input type="file" onChange={(event) => setFile("alarmIndex", event.target.files?.[0] ?? null)} disabled={isBusy} />
-            </label>
-          </div>
         </div>
 
         <div className="decode-summary card compact-card">

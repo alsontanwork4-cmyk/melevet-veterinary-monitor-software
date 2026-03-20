@@ -38,8 +38,15 @@ def _build_index_bytes(unix_seconds_list: list[int]) -> bytes:
 
 
 def test_index_layout_formula(data_dir):
-    index_bytes = (data_dir / "TrendChartRecord.Index").read_bytes()
-    data_bytes = (data_dir / "TrendChartRecord.data").read_bytes()
+    index_path = data_dir / "TrendChartRecord.Index"
+    data_path = data_dir / "TrendChartRecord.data"
+    if not index_path.exists():
+        index_path = data_dir / "Records" / "TrendChartRecord.Index"
+    if not data_path.exists():
+        data_path = data_dir / "Records" / "TrendChartRecord.data"
+
+    index_bytes = index_path.read_bytes()
+    data_bytes = data_path.read_bytes()
 
     parsed = parse_index_bytes(index_bytes, data_bytes)
     expected_entries = (len(index_bytes) - INDEX_HEADER_SIZE - INDEX_TRAILER_SIZE) // INDEX_ENTRY_SIZE

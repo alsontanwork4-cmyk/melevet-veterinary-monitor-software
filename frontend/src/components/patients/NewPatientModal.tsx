@@ -3,6 +3,7 @@ import axios from "axios";
 
 import { createPatient } from "../../api/endpoints";
 import { Patient, PatientCreatePayload } from "../../types/api";
+import { sanitizeDigits, shouldAllowNumericKey } from "../../utils/numericInput";
 import { ModalCard } from "../layout/ModalCard";
 
 interface NewPatientModalProps {
@@ -55,6 +56,12 @@ export function NewPatientModal({ open, onClose, onCreated }: NewPatientModalPro
 
   function setField<K extends keyof NewPatientFormState>(key: K, value: NewPatientFormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function onNumericKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (!shouldAllowNumericKey(event)) {
+      event.preventDefault();
+    }
   }
 
   async function onSubmit(event: FormEvent) {
@@ -158,7 +165,14 @@ export function NewPatientModal({ open, onClose, onCreated }: NewPatientModalPro
           </label>
           <label>
             Tel (optional)
-            <input value={form.tel} onChange={(event) => setField("tel", event.target.value)} disabled={isSubmitting} />
+            <input
+              value={form.tel}
+              onChange={(event) => setField("tel", sanitizeDigits(event.target.value))}
+              onKeyDown={onNumericKeyDown}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              disabled={isSubmitting}
+            />
           </label>
           <label>
             Patient Name
@@ -206,7 +220,14 @@ export function NewPatientModal({ open, onClose, onCreated }: NewPatientModalPro
           </label>
           <label>
             Age (optional)
-            <input value={form.age} onChange={(event) => setField("age", event.target.value)} disabled={isSubmitting} />
+            <input
+              value={form.age}
+              onChange={(event) => setField("age", sanitizeDigits(event.target.value))}
+              onKeyDown={onNumericKeyDown}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              disabled={isSubmitting}
+            />
           </label>
         </div>
 

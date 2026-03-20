@@ -1,18 +1,15 @@
 import ReactECharts from "echarts-for-react";
 
-import { AlarmEvent, MeasurementPoint, NibpEvent } from "../../types/api";
-import { alarmColorMap } from "../../utils/alarmColors";
+import { MeasurementPoint, NibpEvent } from "../../types/api";
 
 interface ReportVitalsChartProps {
   groupedData: Record<string, MeasurementPoint[]>;
   nibpEvents: NibpEvent[];
-  alarms: AlarmEvent[];
   nibpValueKeys: {
     systolic?: string;
     map?: string;
     diastolic?: string;
   };
-  selectedAlarmId: number | null;
 }
 
 function toNibpSeriesData(events: NibpEvent[], key: string): Array<[string, number]> {
@@ -31,9 +28,7 @@ function toNibpSeriesData(events: NibpEvent[], key: string): Array<[string, numb
 export function ReportVitalsChart({
   groupedData,
   nibpEvents,
-  alarms,
   nibpValueKeys,
-  selectedAlarmId,
 }: ReportVitalsChartProps) {
   const trendSeries: Array<Record<string, unknown>> = Object.entries(groupedData).map(([name, points]) => ({
     name,
@@ -78,24 +73,6 @@ export function ReportVitalsChart({
     });
   }
 
-  const alarmLines = alarms.map((alarm) => {
-    const isSelected = selectedAlarmId === alarm.id;
-    return {
-      xAxis: alarm.timestamp,
-      lineStyle: {
-        color: isSelected ? "#111827" : alarmColorMap[alarm.alarm_category],
-        width: isSelected ? 2.5 : 1,
-        opacity: isSelected ? 0.95 : 0.45,
-      },
-      label: {
-        show: isSelected,
-        formatter: alarm.message,
-        position: "insideEndTop",
-        color: "#111827",
-      },
-    };
-  });
-
   const allSeries = [...trendSeries, ...nibpSeries];
   if (allSeries.length === 0) {
     allSeries.push({
@@ -105,12 +82,6 @@ export function ReportVitalsChart({
       yAxisIndex: 0,
     });
   }
-
-  (allSeries[0] as Record<string, unknown>).markLine = {
-    silent: true,
-    symbol: "none",
-    data: alarmLines,
-  };
 
   const fontFamily = "DM Sans, system-ui, sans-serif";
 

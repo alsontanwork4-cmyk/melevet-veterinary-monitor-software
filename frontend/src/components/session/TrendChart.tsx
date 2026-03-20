@@ -1,17 +1,16 @@
 import ReactECharts from "echarts-for-react";
 
-import { AlarmEvent, MeasurementPoint, NibpEvent } from "../../types/api";
-import { alarmColorMap } from "../../utils/alarmColors";
+import { MeasurementPoint, NibpEvent } from "../../types/api";
+import { buildChartTooltipFormatter, formatChartAxisTime, formatChartZoomLabel } from "../../utils/chartTime";
 import { parseNibpReading } from "../../utils/vitals";
 
 interface TrendChartProps {
   groupedData: Record<string, MeasurementPoint[]>;
   nibpEvents: NibpEvent[];
-  alarms: AlarmEvent[];
   seriesLabelByChannel?: Record<string, string>;
 }
 
-export function TrendChart({ groupedData, nibpEvents, alarms, seriesLabelByChannel = {} }: TrendChartProps) {
+export function buildTrendChartOption({ groupedData, nibpEvents, seriesLabelByChannel = {} }: TrendChartProps): Record<string, unknown> {
   const trendSeries: Array<Record<string, unknown>> = Object.entries(groupedData).map(([name, points]) => ({
     name: seriesLabelByChannel[name] ?? name,
     type: "line",
@@ -40,40 +39,21 @@ export function TrendChart({ groupedData, nibpEvents, alarms, seriesLabelByChann
     },
   };
 
-  const alarmLines = alarms.map((alarm) => ({
-    xAxis: alarm.timestamp,
-    lineStyle: {
-      color: alarmColorMap[alarm.alarm_category],
-      width: 1,
-      opacity: 0.7,
-    },
-    label: {
-      show: false,
-    },
-  }));
-
-  const markLine = {
-    silent: true,
-    symbol: "none",
-    data: alarmLines,
-  };
-
-  if (trendSeries.length > 0) {
-    trendSeries[0].markLine = markLine;
-  } else {
+  if (trendSeries.length === 0) {
     trendSeries.push({
       name: "Trend",
       type: "line",
       data: [],
-      markLine,
     });
   }
 
   const fontFamily = "DM Sans, system-ui, sans-serif";
 
-  const option: Record<string, unknown> = {
+  return {
+    useUTC: true,
     tooltip: {
       trigger: "axis",
+      formatter: buildChartTooltipFormatter(),
       backgroundColor: "#FFFFFF",
       borderColor: "#E2E8F0",
       borderWidth: 1,
@@ -87,7 +67,12 @@ export function TrendChart({ groupedData, nibpEvents, alarms, seriesLabelByChann
     xAxis: {
       type: "time",
       axisLine: { lineStyle: { color: "#E2E8F0" } },
-      axisLabel: { fontFamily, color: "#5A6B7F", fontSize: 11 },
+      axisLabel: {
+        fontFamily,
+        color: "#5A6B7F",
+        fontSize: 11,
+        formatter: (value: string | number | Date) => formatChartAxisTime(value),
+      },
       splitLine: { lineStyle: { color: "#EEF2F6" } },
     },
     yAxis: {
@@ -105,10 +90,14 @@ export function TrendChart({ groupedData, nibpEvents, alarms, seriesLabelByChann
         borderColor: "#E2E8F0",
         fillerColor: "rgba(43, 110, 99, 0.08)",
         handleStyle: { color: "#2B6E63" },
+        labelFormatter: (value: string | number | Date) => formatChartZoomLabel(value),
       },
     ],
     series: [...trendSeries, nibpSeries],
   };
+}
 
+export function TrendChart({ groupedData, nibpEvents, seriesLabelByChannel = {} }: TrendChartProps) {
+  const option = buildTrendChartOption({ groupedData, nibpEvents, seriesLabelByChannel });
   return <ReactECharts option={option} style={{ height: "520px", width: "100%" }} notMerge lazyUpdate />;
 }

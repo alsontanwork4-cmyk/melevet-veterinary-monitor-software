@@ -1,6 +1,5 @@
 from .entities import (
-    Alarm,
-    AlarmCategory,
+    AuditLog,
     Channel,
     Encounter,
     Measurement,
@@ -9,7 +8,8 @@ from .entities import (
     RecordingPeriod,
     Segment,
     SourceType,
-    UploadAlarmLink,
+    User,
+    UserSession,
     UploadMeasurementLink,
     UploadNibpEventLink,
     Upload,
@@ -17,8 +17,7 @@ from .entities import (
 )
 
 __all__ = [
-    "Alarm",
-    "AlarmCategory",
+    "AuditLog",
     "Channel",
     "Encounter",
     "Measurement",
@@ -27,7 +26,8 @@ __all__ = [
     "RecordingPeriod",
     "Segment",
     "SourceType",
-    "UploadAlarmLink",
+    "User",
+    "UserSession",
     "UploadMeasurementLink",
     "UploadNibpEventLink",
     "Upload",

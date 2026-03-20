@@ -3,6 +3,7 @@ import axios from "axios";
 
 import { createEncounterFromUpload, deleteEncounter, updatePatient } from "../../api/endpoints";
 import { PatientAvailableReportDate, PatientUpdatePayload, PatientWithUploadCount } from "../../types/api";
+import { sanitizeDigits, shouldAllowNumericKey } from "../../utils/numericInput";
 import { formatEncounterDateLabel } from "../../utils/encounters";
 import { getAgeFromNotes, getGenderFromNotes, removeAgeFromNotes, setGenderInNotes } from "../../utils/patientNotes";
 import { ModalCard } from "../layout/ModalCard";
@@ -101,6 +102,12 @@ export function EditPatientModal({ open, patient, reportDateOptions, onClose, on
 
   function setField<K extends keyof EditPatientFormState>(key: K, value: EditPatientFormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function onNumericKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (!shouldAllowNumericKey(event)) {
+      event.preventDefault();
+    }
   }
 
   async function onSubmit(event: FormEvent) {
@@ -209,7 +216,14 @@ export function EditPatientModal({ open, patient, reportDateOptions, onClose, on
           </label>
           <label>
             Age
-            <input value={form.age} onChange={(event) => setField("age", event.target.value)} disabled={isSubmitting} />
+            <input
+              value={form.age}
+              onChange={(event) => setField("age", sanitizeDigits(event.target.value))}
+              onKeyDown={onNumericKeyDown}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              disabled={isSubmitting}
+            />
           </label>
           <label>
             Gender

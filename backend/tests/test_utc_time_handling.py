@@ -8,8 +8,6 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.database import Base
 from app.models import (
-    Alarm,
-    AlarmCategory,
     Channel,
     Measurement,
     NibpEvent,
@@ -22,7 +20,6 @@ from app.models import (
 )
 from app.schemas.api import MeasurementPoint
 from app.services.chart_service import (
-    list_alarms,
     list_measurements,
     list_nibp_events,
     list_upload_channels,
@@ -47,13 +44,10 @@ def _new_upload(patient_id: int) -> Upload:
         progress_total=1,
         trend_frames=1,
         nibp_frames=0,
-        alarm_frames=0,
         trend_sha256=checksum,
         trend_index_sha256=checksum,
         nibp_sha256=checksum,
         nibp_index_sha256=checksum,
-        alarm_sha256=checksum,
-        alarm_index_sha256=checksum,
     )
 
 
@@ -266,7 +260,7 @@ def test_upload_measurements_include_multiple_segments_and_timezone_stable() -> 
     assert rows_utc[0][0].segment_id != rows_utc[1][0].segment_id
 
 
-def test_alarm_and_nibp_range_filters_apply_at_upload_scope() -> None:
+def test_nibp_range_filters_apply_at_upload_scope() -> None:
     db = _make_session()
 
     patient = Patient(patient_id_code="TZ-3", name="Patient", species="canine")
@@ -302,33 +296,10 @@ def test_alarm_and_nibp_range_filters_apply_at_upload_scope() -> None:
 
     db.add_all(
         [
-            Alarm(
-                upload_id=upload.id,
-                segment_id=segment.id,
-                timestamp=datetime(2026, 1, 19, 12, 5, 0),
-                flag_hi=0,
-                flag_lo=0,
-                alarm_category=AlarmCategory.informational,
-                message="before-window",
-            ),
-            Alarm(
-                upload_id=upload.id,
-                segment_id=segment.id,
-                timestamp=datetime(2026, 1, 19, 12, 10, 0),
-                flag_hi=1,
-                flag_lo=0,
-                alarm_category=AlarmCategory.physiological_warning,
-                message="in-window",
-            ),
-        ]
-    )
-
-    db.add_all(
-        [
             NibpEvent(
                 upload_id=upload.id,
                 segment_id=segment.id,
-                timestamp=datetime(2026, 1, 19, 12, 8, 0),
+                timestamp=datetime(2026, 1, 19, 12, 10, 0),
                 channel_values={"bp_systolic_inferred": 120, "bp_mean_inferred": 100, "bp_diastolic_inferred": 90},
                 has_measurement=True,
             ),
@@ -346,12 +317,6 @@ def test_alarm_and_nibp_range_filters_apply_at_upload_scope() -> None:
     from_ts = datetime(2026, 1, 19, 12, 9, 0, tzinfo=UTC)
     to_ts = datetime(2026, 1, 19, 12, 15, 0, tzinfo=UTC)
 
-    filtered_alarms = list_alarms(
-        db,
-        upload_id=upload.id,
-        from_ts=from_ts,
-        to_ts=to_ts,
-    )
     filtered_nibp = list_nibp_events(
         db,
         upload_id=upload.id,
@@ -359,8 +324,7 @@ def test_alarm_and_nibp_range_filters_apply_at_upload_scope() -> None:
         to_ts=to_ts,
     )
 
-    assert [alarm.message for alarm in filtered_alarms] == ["in-window"]
-    assert len(filtered_nibp) == 0
+    assert [event.channel_values["bp_systolic_inferred"] for event in filtered_nibp] == [120]
 
 
 def test_upload_channel_listing_supports_source_filters() -> None:
@@ -444,7 +408,7 @@ def test_upload_channel_listing_supports_source_filters() -> None:
     assert [channel.name for channel in all_channels] == ["heart_rate_be_u16", "bp_systolic_inferred"]
 
 
-def test_alarm_and_nibp_filters_apply_with_segment_and_time_window() -> None:
+def test_nibp_filters_apply_with_segment_and_time_window() -> None:
     db = _make_session()
 
     patient = Patient(patient_id_code="TZ-5", name="Patient", species="canine")
@@ -489,29 +453,6 @@ def test_alarm_and_nibp_filters_apply_with_segment_and_time_window() -> None:
 
     db.add_all(
         [
-            Alarm(
-                upload_id=upload.id,
-                segment_id=segment_a.id,
-                timestamp=datetime(2026, 1, 19, 12, 10, 0),
-                flag_hi=0,
-                flag_lo=1,
-                alarm_category=AlarmCategory.informational,
-                message="segment-a-hit",
-            ),
-            Alarm(
-                upload_id=upload.id,
-                segment_id=segment_b.id,
-                timestamp=datetime(2026, 1, 19, 12, 10, 0),
-                flag_hi=0,
-                flag_lo=2,
-                alarm_category=AlarmCategory.informational,
-                message="segment-b-ignore",
-            ),
-        ]
-    )
-
-    db.add_all(
-        [
             NibpEvent(
                 upload_id=upload.id,
                 segment_id=segment_a.id,
@@ -533,13 +474,6 @@ def test_alarm_and_nibp_filters_apply_with_segment_and_time_window() -> None:
     from_ts = datetime(2026, 1, 19, 12, 9, 0, tzinfo=UTC)
     to_ts = datetime(2026, 1, 19, 12, 11, 0, tzinfo=UTC)
 
-    filtered_alarms = list_alarms(
-        db,
-        upload_id=upload.id,
-        segment_id=segment_a.id,
-        from_ts=from_ts,
-        to_ts=to_ts,
-    )
     filtered_nibp = list_nibp_events(
         db,
         upload_id=upload.id,
@@ -548,7 +482,6 @@ def test_alarm_and_nibp_filters_apply_with_segment_and_time_window() -> None:
         to_ts=to_ts,
     )
 
-    assert [alarm.message for alarm in filtered_alarms] == ["segment-a-hit"]
     assert [event.channel_values["bp_systolic_inferred"] for event in filtered_nibp] == [120]
 
 

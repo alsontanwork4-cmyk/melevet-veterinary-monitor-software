@@ -31,13 +31,10 @@ def _new_upload(patient_id: int, upload_time: datetime) -> Upload:
         progress_total=1,
         trend_frames=1,
         nibp_frames=0,
-        alarm_frames=0,
         trend_sha256=checksum,
         trend_index_sha256=checksum,
         nibp_sha256=checksum,
         nibp_index_sha256=checksum,
-        alarm_sha256=checksum,
-        alarm_index_sha256=checksum,
         combined_hash=checksum,
     )
 
@@ -82,15 +79,16 @@ def test_list_patients_uses_preferred_report_date_without_changing_latest_report
 
     patients = list_patients(q=None, limit=50, offset=0, db=db)
 
-    assert len(patients) == 1
-    assert patients[0].age == "5"
-    assert patients[0].owner_name == "Tan Iee Hong"
-    assert patients[0].notes == "Gender: Male\nAge: 5"
-    assert patients[0].preferred_encounter_id == preferred_encounter.id
-    assert patients[0].upload_count == 2
-    assert patients[0].last_upload_time == datetime(2026, 1, 19, 6, 30, 0)
-    assert patients[0].latest_report_date == date(2026, 1, 19)
-    assert patients[0].report_date == date(2026, 1, 18)
+    assert patients.total == 1
+    assert len(patients.items) == 1
+    assert patients.items[0].age == "5"
+    assert patients.items[0].owner_name == "Tan Iee Hong"
+    assert patients.items[0].notes == "Gender: Male\nAge: 5"
+    assert patients.items[0].preferred_encounter_id == preferred_encounter.id
+    assert patients.items[0].upload_count == 2
+    assert patients.items[0].last_upload_time == datetime(2026, 1, 19, 6, 30, 0)
+    assert patients.items[0].latest_report_date == date(2026, 1, 19)
+    assert patients.items[0].report_date == date(2026, 1, 18)
 
 
 def test_list_patients_returns_null_report_dates_when_patient_has_no_encounters() -> None:
@@ -105,10 +103,11 @@ def test_list_patients_returns_null_report_dates_when_patient_has_no_encounters(
 
     patients = list_patients(q=None, limit=50, offset=0, db=db)
 
-    assert len(patients) == 1
-    assert patients[0].upload_count == 1
-    assert patients[0].latest_report_date is None
-    assert patients[0].report_date is None
+    assert patients.total == 1
+    assert len(patients.items) == 1
+    assert patients.items[0].upload_count == 1
+    assert patients.items[0].latest_report_date is None
+    assert patients.items[0].report_date is None
 
 
 def test_update_patient_allows_updating_patient_id_code() -> None:

@@ -15,21 +15,41 @@ export function getGenderFromNotes(notes: string | null | undefined): string {
   return genderLine.split(":").slice(1).join(":").trim();
 }
 
-export function getAgeFromNotes(notes: string | null | undefined): string {
+function getStructuredFieldFromNotes(notes: string | null | undefined, fieldName: string): string {
   if (!notes) {
     return "";
   }
 
-  const ageLine = notes
+  const fieldLine = notes
     .split("\n")
     .map((line) => line.trim())
-    .find((line) => /^age\s*:/i.test(line));
+    .find((line) => new RegExp(`^${fieldName}\\s*:`, "i").test(line));
 
-  if (!ageLine) {
+  if (!fieldLine) {
     return "";
   }
 
-  return ageLine.split(":").slice(1).join(":").trim();
+  return fieldLine.split(":").slice(1).join(":").trim();
+}
+
+export function getAgeFromNotes(notes: string | null | undefined): string {
+  return getStructuredFieldFromNotes(notes, "age");
+}
+
+export function getTelFromNotes(notes: string | null | undefined): string {
+  return getStructuredFieldFromNotes(notes, "tel");
+}
+
+export function getFreeTextNotes(notes: string | null | undefined): string {
+  if (!notes) {
+    return "";
+  }
+
+  return notes
+    .split("\n")
+    .filter((line) => !/^(gender|tel|age)\s*:/i.test(line.trim()))
+    .join("\n")
+    .trim();
 }
 
 export function setGenderInNotes(notes: string | null | undefined, gender: string): string | null {

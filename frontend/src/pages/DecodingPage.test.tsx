@@ -91,6 +91,37 @@ afterEach(async () => {
 });
 
 describe("DecodingPage", () => {
+  it("clears a selected file when the remove button is clicked", async () => {
+    await act(async () => {
+      root.render(<DecodingPage />);
+    });
+
+    const fileInputs = Array.from(container.querySelectorAll('input[type="file"]')) as HTMLInputElement[];
+    const trendDataInput = fileInputs[0];
+
+    setInputFiles(trendDataInput, [new File(["trend"], "TrendChartRecord.data")]);
+    await act(async () => {
+      trendDataInput.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("Trend Chart requires both the .data and .Index files.");
+    });
+
+    const removeButton = container.querySelector('button[aria-label="Remove TrendChartRecord.data"]');
+    expect(removeButton).not.toBeNull();
+
+    await act(async () => {
+      removeButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).not.toContain("Trend Chart requires both the .data and .Index files.");
+      expect(container.textContent).toContain("0 complete pairs ready for export.");
+      expect(container.querySelector('button[aria-label="Remove TrendChartRecord.data"]')).toBeNull();
+    });
+  });
+
   it("blocks submit when a pair is incomplete", async () => {
     await act(async () => {
       root.render(<DecodingPage />);

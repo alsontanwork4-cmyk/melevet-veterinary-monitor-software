@@ -12,7 +12,7 @@ export function DiscoveryReport({ data }: DiscoveryReportProps) {
       <div className="card">
         <h2>Channel Discovery Report</h2>
         <p>
-          Trend Chart Records: <strong>{data.trend_frames}</strong> | NIBP Records: <strong>{data.nibp_frames}</strong> | Alarm Events: <strong>{data.alarm_frames}</strong>
+          Trend Chart Records: <strong>{data.trend_frames}</strong> | NIBP Records: <strong>{data.nibp_frames}</strong>
         </p>
         <p>
           Recording Periods: <strong>{data.periods}</strong> | Segments: <strong>{data.segments}</strong>

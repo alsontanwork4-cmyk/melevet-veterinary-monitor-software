@@ -7,8 +7,6 @@ from sqlalchemy import Integer, Select, and_, cast, func, select
 from sqlalchemy.orm import Session
 
 from ..models import (
-    Alarm,
-    AlarmCategory,
     Channel,
     Encounter,
     Measurement,
@@ -16,10 +14,10 @@ from ..models import (
     RecordingPeriod,
     Segment,
     SourceType,
-    UploadAlarmLink,
     UploadMeasurementLink,
     UploadNibpEventLink,
 )
+from ..utils import coerce_utc_naive
 from .encounter_service import encounter_day_window
 
 
@@ -28,6 +26,12 @@ class MeasurementQueryResult:
     rows: list[tuple[Measurement, str]]
     matched_row_count: int
     returned_row_count: int
+
+
+@dataclass(frozen=True)
+class PaginatedNibpEventResult:
+    items: list[NibpEvent]
+    total: int
 
 
 def _apply_time_filter(stmt: Select, model_timestamp, from_ts: datetime | None, to_ts: datetime | None) -> Select:
@@ -40,13 +44,6 @@ def _apply_time_filter(stmt: Select, model_timestamp, from_ts: datetime | None, 
         stmt = stmt.where(and_(*conditions))
     return stmt
 
-
-def _normalize_utc_naive(timestamp: datetime | None) -> datetime | None:
-    if timestamp is None:
-        return None
-    if timestamp.tzinfo is None:
-        return timestamp
-    return timestamp.astimezone(UTC).replace(tzinfo=None)
 
 
 def _has_measurement_links_for_upload(db: Session, upload_id: int) -> bool:
@@ -68,10 +65,6 @@ def _has_nibp_links_for_upload(db: Session, upload_id: int) -> bool:
         db.scalar(select(func.count(UploadNibpEventLink.id)).where(UploadNibpEventLink.upload_id == upload_id))
         or 0
     )
-
-
-def _has_alarm_links_for_upload(db: Session, upload_id: int) -> bool:
-    return bool(db.scalar(select(func.count(UploadAlarmLink.id)).where(UploadAlarmLink.upload_id == upload_id)) or 0)
 
 
 def _build_measurement_row_query(source_type: SourceType) -> Select:
@@ -216,8 +209,8 @@ def _execute_measurement_query(
     max_points: int | None,
     source_type: SourceType,
 ) -> MeasurementQueryResult:
-    from_ts = _normalize_utc_naive(from_ts)
-    to_ts = _normalize_utc_naive(to_ts)
+    from_ts = coerce_utc_naive(from_ts)
+    to_ts = coerce_utc_naive(to_ts)
 
     count_stmt = _build_measurement_count_query(source_type)
     row_stmt = _build_measurement_row_query(source_type)
@@ -260,8 +253,8 @@ def _execute_legacy_measurement_query(
     max_points: int | None,
     source_type: SourceType,
 ) -> MeasurementQueryResult:
-    from_ts = _normalize_utc_naive(from_ts)
-    to_ts = _normalize_utc_naive(to_ts)
+    from_ts = coerce_utc_naive(from_ts)
+    to_ts = coerce_utc_naive(to_ts)
 
     count_stmt = (
         select(func.count())
@@ -616,40 +609,6 @@ def query_encounter_measurements(
     )
 
 
-def list_alarms(
-    db: Session,
-    upload_id: int,
-    segment_id: int | None = None,
-    category: AlarmCategory | None = None,
-    from_ts: datetime | None = None,
-    to_ts: datetime | None = None,
-) -> list[Alarm]:
-    from_ts = _normalize_utc_naive(from_ts)
-    to_ts = _normalize_utc_naive(to_ts)
-
-    if _has_alarm_links_for_upload(db, upload_id):
-        stmt = select(Alarm).join(UploadAlarmLink, UploadAlarmLink.alarm_id == Alarm.id).where(
-            UploadAlarmLink.upload_id == upload_id
-        )
-
-        if segment_id is not None:
-            stmt = stmt.where(UploadAlarmLink.segment_id == segment_id)
-        if category is not None:
-            stmt = stmt.where(Alarm.alarm_category == category)
-        stmt = _apply_time_filter(stmt, UploadAlarmLink.timestamp, from_ts, to_ts)
-    else:
-        stmt = select(Alarm).where(Alarm.upload_id == upload_id)
-
-        if segment_id is not None:
-            stmt = stmt.where(Alarm.segment_id == segment_id)
-        if category is not None:
-            stmt = stmt.where(Alarm.alarm_category == category)
-        stmt = _apply_time_filter(stmt, Alarm.timestamp, from_ts, to_ts)
-
-    stmt = stmt.order_by(Alarm.timestamp.asc(), Alarm.id.asc())
-    return list(db.scalars(stmt))
-
-
 def list_nibp_events(
     db: Session,
     upload_id: int,
@@ -658,8 +617,8 @@ def list_nibp_events(
     from_ts: datetime | None = None,
     to_ts: datetime | None = None,
 ) -> list[NibpEvent]:
-    from_ts = _normalize_utc_naive(from_ts)
-    to_ts = _normalize_utc_naive(to_ts)
+    from_ts = coerce_utc_naive(from_ts)
+    to_ts = coerce_utc_naive(to_ts)
 
     if _has_nibp_links_for_upload(db, upload_id):
         stmt = select(NibpEvent).join(
@@ -684,6 +643,59 @@ def list_nibp_events(
     return list(db.scalars(stmt))
 
 
+def list_nibp_events_page(
+    db: Session,
+    *,
+    upload_id: int,
+    segment_id: int | None = None,
+    measurements_only: bool = False,
+    from_ts: datetime | None = None,
+    to_ts: datetime | None = None,
+    limit: int,
+    offset: int,
+) -> PaginatedNibpEventResult:
+    from_ts = coerce_utc_naive(from_ts)
+    to_ts = coerce_utc_naive(to_ts)
+
+    if _has_nibp_links_for_upload(db, upload_id):
+        count_stmt = (
+            select(func.count())
+            .select_from(NibpEvent)
+            .join(UploadNibpEventLink, UploadNibpEventLink.nibp_event_id == NibpEvent.id)
+            .where(UploadNibpEventLink.upload_id == upload_id)
+        )
+        row_stmt = select(NibpEvent).join(
+            UploadNibpEventLink, UploadNibpEventLink.nibp_event_id == NibpEvent.id
+        ).where(UploadNibpEventLink.upload_id == upload_id)
+
+        if segment_id is not None:
+            count_stmt = count_stmt.where(UploadNibpEventLink.segment_id == segment_id)
+            row_stmt = row_stmt.where(UploadNibpEventLink.segment_id == segment_id)
+        if measurements_only:
+            count_stmt = count_stmt.where(NibpEvent.has_measurement.is_(True))
+            row_stmt = row_stmt.where(NibpEvent.has_measurement.is_(True))
+        count_stmt = _apply_time_filter(count_stmt, UploadNibpEventLink.timestamp, from_ts, to_ts)
+        row_stmt = _apply_time_filter(row_stmt, UploadNibpEventLink.timestamp, from_ts, to_ts)
+    else:
+        count_stmt = select(func.count()).select_from(NibpEvent).where(NibpEvent.upload_id == upload_id)
+        row_stmt = select(NibpEvent).where(NibpEvent.upload_id == upload_id)
+
+        if segment_id is not None:
+            count_stmt = count_stmt.where(NibpEvent.segment_id == segment_id)
+            row_stmt = row_stmt.where(NibpEvent.segment_id == segment_id)
+        if measurements_only:
+            count_stmt = count_stmt.where(NibpEvent.has_measurement.is_(True))
+            row_stmt = row_stmt.where(NibpEvent.has_measurement.is_(True))
+        count_stmt = _apply_time_filter(count_stmt, NibpEvent.timestamp, from_ts, to_ts)
+        row_stmt = _apply_time_filter(row_stmt, NibpEvent.timestamp, from_ts, to_ts)
+
+    total = int(db.scalar(count_stmt) or 0)
+    items = db.scalars(
+        row_stmt.order_by(NibpEvent.timestamp.asc(), NibpEvent.id.asc()).offset(offset).limit(limit)
+    ).all()
+    return PaginatedNibpEventResult(items=list(items), total=total)
+
+
 def list_encounter_nibp_events(
     db: Session,
     encounter_id: int,
@@ -700,4 +712,28 @@ def list_encounter_nibp_events(
         measurements_only=measurements_only,
         from_ts=from_ts,
         to_ts=to_ts,
+    )
+
+
+def list_encounter_nibp_events_page(
+    db: Session,
+    *,
+    encounter_id: int,
+    measurements_only: bool = False,
+    limit: int,
+    offset: int,
+) -> PaginatedNibpEventResult:
+    encounter = db.get(Encounter, encounter_id)
+    if encounter is None:
+        return PaginatedNibpEventResult(items=[], total=0)
+
+    from_ts, to_ts = _encounter_window(encounter)
+    return list_nibp_events_page(
+        db,
+        upload_id=encounter.upload_id,
+        measurements_only=measurements_only,
+        from_ts=from_ts,
+        to_ts=to_ts,
+        limit=limit,
+        offset=offset,
     )

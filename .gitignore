@@ -15,5 +15,9 @@ frontend/tsconfig.tsbuildinfo
 
 backend/.env
 frontend/.env
+backend/.staged_uploads/
+backend/.upload_spool/
+backend/backups/
+backend/logs/
 
 Records/

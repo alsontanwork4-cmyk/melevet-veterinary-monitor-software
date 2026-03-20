@@ -29,13 +29,10 @@ def _new_upload(patient_id: int) -> Upload:
         completed_at=datetime(2026, 3, 5, 0, 1, 0),
         trend_frames=0,
         nibp_frames=0,
-        alarm_frames=0,
         trend_sha256=checksum,
         trend_index_sha256=checksum,
         nibp_sha256=checksum,
         nibp_index_sha256=checksum,
-        alarm_sha256=checksum,
-        alarm_index_sha256=checksum,
     )
 
 
